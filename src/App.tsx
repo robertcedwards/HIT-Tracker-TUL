@@ -1,7 +1,7 @@
 import './index.css'
 import { ExerciseTable } from './components/ExerciseTable'
 import { Exercise, EXERCISE_OPTIONS } from './types/Exercise'
-import { Dumbbell } from 'lucide-react'
+import { Dumbbell, Info as InfoIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { InfoModal } from './components/InfoModal'
 
@@ -57,21 +57,26 @@ function App() {
       {showModal && <InfoModal onClose={() => setShowModal(false)} />}
 
       <footer className="bg-gray-50 p-4 text-center sticky bottom-0">
-        <a 
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            setShowModal(true);
-          }}
-          className="text-blue-500 underline"
-        >
-          Open Info Modal
-        </a>
-        <div className="mt-2">
-          <a href="https://github.com/robertcedwards/HIT-Tracker-TUL" target="_blank" className="inline-block mx-2">
+        <div className="flex justify-center space-x-4">
+          <button 
+            onClick={() => setShowModal(true)} 
+            className="flex items-center gap-2 px-2 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            <InfoIcon size={20} />
+            More Info
+          </button>
+          <a 
+            href="https://github.com/robertcedwards/HIT-Tracker-TUL" 
+            target="_blank" 
+            className="inline-block mx-2 px-2 py-1"
+          >
             <img src="https://img.shields.io/github/stars/robertcedwards/HIT-Tracker-TUL?style=social" alt="GitHub Star" />
           </a>
-          <a href="https://app.netlify.com/sites/hit-tracker/deploys" target="_blank" className="inline-block mx-2">
+          <a 
+            href="https://app.netlify.com/sites/hit-tracker/deploys" 
+            target="_blank" 
+            className="inline-block mx-2 px-2 py-1"
+          >
             <img src="https://api.netlify.com/api/v1/badges/5168e501-6a4f-4538-97ee-2108388d9e51/deploy-status" alt="Netlify Status" />
           </a>
         </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, CheckCircle, Clock, BarChart2, Info } from 'lucide-react';
 
 interface InfoModalProps {
@@ -6,8 +6,32 @@ interface InfoModalProps {
 }
 
 export const InfoModal: React.FC<InfoModalProps> = ({ onClose }) => {
+  // Close modal on Esc key press
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  // Close modal on outside click
+  const handleOutsideClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.currentTarget === event.target) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" 
+      onClick={handleOutsideClick}
+    >
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
@@ -35,9 +59,9 @@ export const InfoModal: React.FC<InfoModalProps> = ({ onClose }) => {
               <p className="text-gray-600">
                 Data is stored locally in your browser using localStorage. For more updates, check out my Warpcast: 
                 <a href="https://warpcast.com/0xhashbrown" className="text-blue-500 underline"> @0xhashbrown</a>.
-                <p className="text-gray-600">
-                  It was built using <a href="https://srcbook.com" className="text-blue-500 underline">srcbook.com</a>.
-                </p>
+              </p>
+              <p className="text-gray-600">
+                It was built using <a href="https://srcbook.com" className="text-blue-500 underline">srcbook.com</a>.
               </p>
             </section>
 
