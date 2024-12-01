@@ -1,4 +1,4 @@
-import { Exercise, EXERCISE_OPTIONS } from '../types/Exercise';
+import { EXERCISE_OPTIONS } from '../types/Exercise';
 import { ExerciseSelect } from './ExerciseSelect';
 
 interface CompletionModalProps {

@@ -58,10 +58,10 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   }, [exercises]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
+    let interval: number | undefined;
     
     if (timerState.isRunning) {
-      interval = setInterval(() => {
+      interval = window.setInterval(() => {
         setTimerState(prev => {
           const newTime = prev.time + 1;
           
@@ -93,7 +93,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
 
     return () => {
       if (interval) {
-        clearInterval(interval);
+        window.clearInterval(interval);
       }
     };
   }, [timerState.isRunning, timerSettings, localExercises]);

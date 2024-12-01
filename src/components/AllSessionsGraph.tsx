@@ -29,7 +29,7 @@ export function AllSessionsGraph({ sessions }: AllSessionsGraphProps) {
     '#00C49F',
   ];
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean, payload?: any[] }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white p-4 rounded shadow-lg border">

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import './index.css'
 import { ExerciseTable } from './components/ExerciseTable'
 import { Exercise, EXERCISE_OPTIONS } from './types/Exercise'
