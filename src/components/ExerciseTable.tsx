@@ -192,16 +192,27 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   const confirmDelete = () => {
     if (exerciseToDelete) {
       removeExercise(exerciseToDelete);
-      // You might want to handle cleaning up the exercise data from localStorage here
+      setLocalExercises(prev => prev.filter(ex => ex.name !== exerciseToDelete));
       localStorage.removeItem(`exercise_${exerciseToDelete}`);
+      setShowDeleteModal(false);
+      setExerciseToDelete(null);
     }
   };
 
   const handleAddExercise = (e: React.FormEvent) => {
     e.preventDefault();
     if (newExerciseName.trim()) {
-      addExercise(newExerciseName.trim());
-      setNewExerciseName('');
+      const added = addExercise(newExerciseName.trim());
+      if (added) {
+        const newExercise: Exercise = {
+          name: newExerciseName.trim(),
+          sessions: [],
+          lastUpdated: new Date().toISOString()
+        };
+        setLocalExercises(prev => [...prev, newExercise]);
+        onSaveExercise(newExercise);
+        setNewExerciseName('');
+      }
     }
   };
 

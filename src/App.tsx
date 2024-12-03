@@ -7,6 +7,7 @@ import { InfoModal } from './components/InfoModal'
 
 function App() {
   const [showModal, setShowModal] = useState(false)
+  const [exercises, setExercises] = useState<Exercise[]>([])
 
   useEffect(() => {
     const hasSeenModal = localStorage.getItem('hasSeenModal')
@@ -14,6 +15,21 @@ function App() {
       setShowModal(true)
       localStorage.setItem('hasSeenModal', 'true')
     }
+  }, [])
+
+  useEffect(() => {
+    const exerciseData = EXERCISE_OPTIONS.map(name => {
+      const existingData = getExerciseData(name)
+      if (existingData) {
+        return existingData
+      }
+      return {
+        name,
+        sessions: [],
+        lastUpdated: new Date().toISOString()
+      }
+    })
+    setExercises(exerciseData)
   }, [])
 
   const getExerciseData = (name: string): Exercise | null => {
@@ -29,16 +45,13 @@ function App() {
   const saveExerciseData = (exercise: Exercise) => {
     try {
       localStorage.setItem(`exercise_${exercise.name}`, JSON.stringify(exercise))
+      setExercises(prev => 
+        prev.map(ex => ex.name === exercise.name ? exercise : ex)
+      )
     } catch (error) {
       console.error('Error saving exercise data:', error)
     }
   }
-
-  const exerciseData = EXERCISE_OPTIONS.map(name => getExerciseData(name) || {
-    name,
-    sessions: [],
-    lastUpdated: new Date().toISOString()
-  })
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 flex flex-col">
@@ -49,7 +62,7 @@ function App() {
         </div>
 
         <ExerciseTable 
-          exercises={exerciseData}
+          exercises={exercises}
           onSaveExercise={saveExerciseData}
         />
       </div>
@@ -60,25 +73,11 @@ function App() {
         <div className="flex justify-center space-x-4">
           <button 
             onClick={() => setShowModal(true)} 
-            className="flex items-center gap-2 px-2 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
           >
             <InfoIcon size={20} />
             More Info
           </button>
-          <a 
-            href="https://github.com/robertcedwards/HIT-Tracker-TUL" 
-            target="_blank" 
-            className="inline-block mx-2 px-2 py-1"
-          >
-            <img src="https://img.shields.io/github/stars/robertcedwards/HIT-Tracker-TUL?style=social" alt="GitHub Star" />
-          </a>
-          <a 
-            href="https://app.netlify.com/sites/hit-tracker/deploys" 
-            target="_blank" 
-            className="inline-block mx-2 px-2 py-1"
-          >
-            <img src="https://api.netlify.com/api/v1/badges/5168e501-6a4f-4538-97ee-2108388d9e51/deploy-status" alt="Netlify Status" />
-          </a>
         </div>
       </footer>
     </div>
