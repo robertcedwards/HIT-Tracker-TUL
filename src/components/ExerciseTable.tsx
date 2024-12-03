@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Exercise, Session } from '../types/Exercise';
+import { Exercise, Session, addExercise, removeExercise } from '../types/Exercise';
 import { AllSessionsGraph } from './AllSessionsGraph';
-import { Play, Square, Volume2, VolumeX } from 'lucide-react';
+import { Play, Square, Volume2, VolumeX, Trash2, Plus } from 'lucide-react';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface ExerciseTableProps {
   exercises: Exercise[];
@@ -46,6 +47,10 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     });
     return initialWeights;
   });
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [exerciseToDelete, setExerciseToDelete] = useState<string | null>(null);
+  const [newExerciseName, setNewExerciseName] = useState('');
 
   // Initialize audio element with correct path
   useEffect(() => {
@@ -179,6 +184,27 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     }
   };
 
+  const handleDeleteExercise = (exerciseName: string) => {
+    setExerciseToDelete(exerciseName);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (exerciseToDelete) {
+      removeExercise(exerciseToDelete);
+      // You might want to handle cleaning up the exercise data from localStorage here
+      localStorage.removeItem(`exercise_${exerciseToDelete}`);
+    }
+  };
+
+  const handleAddExercise = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newExerciseName.trim()) {
+      addExercise(newExerciseName.trim());
+      setNewExerciseName('');
+    }
+  };
+
   return (
     <div>
       <div className="overflow-x-auto mb-8">
@@ -195,7 +221,6 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                       onClick={() => {
                         updateTimerSettings({ soundEnabled: !timerSettings.soundEnabled });
                         if (!timerSettings.soundEnabled) {
-                          // Test sound when enabling
                           setTimeout(testSound, 100);
                         }
                       }}
@@ -218,6 +243,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                 </div>
               </th>
               <th className="px-4 py-2 text-left">Last Session</th>
+              <th className="px-4 py-2 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -260,24 +286,65 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-gray-600">
+                  <td className="px-4 py-2 text-gray-500">
                     {lastSession ? (
-                      `${lastSession.weight}lbs × ${lastSession.timeUnderLoad}s`
+                      <>
+                        {lastSession.weight}lbs × {lastSession.timeUnderLoad}s
+                      </>
                     ) : (
                       'No sessions yet'
                     )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <button
+                      onClick={() => handleDeleteExercise(exercise.name)}
+                      className="text-red-500 hover:text-red-700"
+                      title="Delete exercise"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      
+
+      <div className="mb-8 border-t pt-8">
+        <h3 className="text-lg font-semibold mb-4">Add New Exercise</h3>
+        <form onSubmit={handleAddExercise} className="flex gap-2">
+          <input
+            type="text"
+            value={newExerciseName}
+            onChange={(e) => setNewExerciseName(e.target.value)}
+            placeholder="New exercise name"
+            className="flex-grow p-2 border rounded-lg"
+          />
+          <button
+            type="submit"
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+          >
+            <Plus size={20} />
+            Add Exercise
+          </button>
+        </form>
       </div>
 
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h2 className="text-lg font-semibold mb-4">Training Progress</h2>
-        <AllSessionsGraph sessions={allSessions} />
-      </div>
+      {allSessions.length > 0 && (
+        <div className="mb-8">
+          <AllSessionsGraph sessions={allSessions} />
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={confirmDelete}
+        title="Delete Exercise"
+        message={`Are you sure you want to delete ${exerciseToDelete}? This action cannot be undone.`}
+      />
+    </div>
     </div>
   );
 }

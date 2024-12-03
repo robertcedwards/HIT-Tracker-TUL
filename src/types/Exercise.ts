@@ -10,12 +10,22 @@ export type Exercise = {
   lastUpdated: string;
 };
 
-export const EXERCISE_OPTIONS = [
+export let EXERCISE_OPTIONS = [
   'Chest Press',
   'Shoulder Press',
   'Lat Pull Down',
   'Seated Row',
   'Leg Press',
-] as const;
+];
 
 export type ExerciseName = typeof EXERCISE_OPTIONS[number];
+
+export const addExercise = (name: string) => {
+  if (!EXERCISE_OPTIONS.includes(name)) {
+    EXERCISE_OPTIONS.push(name);
+  }
+};
+
+export const removeExercise = (name: string) => {
+  EXERCISE_OPTIONS = EXERCISE_OPTIONS.filter(exercise => exercise !== name);
+};
