@@ -15,18 +15,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { signer } = await client.signIn.verify(code);
-    const { user } = await client.lookupSigner({ signerUuid: signer.signerUuid });
+    const signer = await client.verifySignInAttempt(code);
+    const signerData = await client.lookupSigner({ signerUuid: signer.signerUuid });
 
     const { error } = await supabase.auth.signUp({
-      email: `${user.username}@farcaster.xyz`,
+      email: `${signerData.signer.fid}@farcaster.xyz`,
       password: signer.signerUuid,
       options: {
         data: {
-          farcaster_id: user.fid,
-          username: user.username,
-          display_name: user.displayName,
-          avatar_url: user.pfp.url,
+          farcaster_id: signerData.signer.fid,
+          username: signerData.signer.fid.toString(),
+          display_name: signerData.signer.fid.toString(),
+          avatar_url: '',
         },
       },
     });
