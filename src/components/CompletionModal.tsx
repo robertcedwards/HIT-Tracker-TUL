@@ -1,4 +1,4 @@
-import { EXERCISE_OPTIONS } from '../types/Exercise';
+import { DEFAULT_EXERCISES } from '../types/Exercise';
 import { ExerciseSelect } from './ExerciseSelect';
 
 interface CompletionModalProps {
@@ -12,7 +12,7 @@ export function CompletionModal({
   onClose, 
   onSelectNext 
 }: CompletionModalProps) {
-  const remainingExercises = EXERCISE_OPTIONS.filter(ex => ex !== currentExercise);
+  const remainingExercises = DEFAULT_EXERCISES.filter((ex: string) => ex !== currentExercise);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">

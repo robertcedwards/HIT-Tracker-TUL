@@ -13,7 +13,6 @@ function App() {
   const [showModal, setShowModal] = useState(false)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -37,14 +36,11 @@ function App() {
 
   const loadExercises = async (userId: string) => {
     try {
-      setLoading(true)
       await initializeDefaultExercises(userId)
       const data = await getExercises(userId)
       setExercises(data)
     } catch (error) {
       console.error('Error loading exercises:', error)
-    } finally {
-      setLoading(false)
     }
   }
 

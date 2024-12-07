@@ -52,7 +52,7 @@ export const Timer = forwardRef<{ resetTimer: () => void }, TimerProps>(
     }, [time, previousTime, isRunning, settings]);
 
     useEffect(() => {
-      let interval: number;
+      let interval: NodeJS.Timeout;
       if (isRunning) {
         interval = setInterval(() => {
           setTime(t => t + 1);
