@@ -36,23 +36,31 @@ export async function getExercises(userId: string): Promise<Exercise[]> {
 }
 
 export async function initializeDefaultExercises(userId: string) {
-  const { data: existing } = await supabase
+  const { data: existing, error } = await supabase
     .from('exercises')
     .select('name')
     .eq('user_id', userId);
 
-  if (!existing || existing.length === 0) {
-    const exercises = DEFAULT_EXERCISES.map(name => ({
+  if (error) throw error;
+
+  // Get names of existing exercises
+  const existingNames = new Set(existing?.map(e => e.name) || []);
+  
+  // Only add exercises that don't already exist
+  const exercisesToAdd = DEFAULT_EXERCISES
+    .filter(name => !existingNames.has(name))
+    .map(name => ({
       name,
       user_id: userId,
       last_updated: new Date().toISOString()
     }));
 
-    const { error } = await supabase
+  if (exercisesToAdd.length > 0) {
+    const { error: insertError } = await supabase
       .from('exercises')
-      .insert(exercises);
+      .insert(exercisesToAdd);
 
-    if (error) throw error;
+    if (insertError) throw insertError;
   }
 }
 
