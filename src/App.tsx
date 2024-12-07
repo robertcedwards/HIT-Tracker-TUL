@@ -1,64 +1,84 @@
 import './index.css'
 import { ExerciseTable } from './components/ExerciseTable'
-import { Exercise, EXERCISE_OPTIONS } from './types/Exercise'
-import { Dumbbell, Info as InfoIcon } from 'lucide-react'
+import { Exercise } from './types/Exercise'
+import { Dumbbell, Info as InfoIcon, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { InfoModal } from './components/InfoModal'
+import { AuthComponent } from './components/Auth'
+import { supabase } from './lib/supabase'
+import { Session } from '@supabase/supabase-js'
+import { initializeDefaultExercises, getExercises, saveSession } from './lib/database'
 
 function App() {
   const [showModal, setShowModal] = useState(false)
   const [exercises, setExercises] = useState<Exercise[]>([])
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const hasSeenModal = localStorage.getItem('hasSeenModal')
-    if (!hasSeenModal) {
-      setShowModal(true)
-      localStorage.setItem('hasSeenModal', 'true')
-    }
-  }, [])
-
-  useEffect(() => {
-    const exerciseData = EXERCISE_OPTIONS.map(name => {
-      const existingData = getExerciseData(name)
-      if (existingData) {
-        return existingData
-      }
-      return {
-        name,
-        sessions: [],
-        lastUpdated: new Date().toISOString()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      if (session) {
+        loadExercises(session.user.id)
       }
     })
-    setExercises(exerciseData)
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      if (session) {
+        loadExercises(session.user.id)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  const getExerciseData = (name: string): Exercise | null => {
+  const loadExercises = async (userId: string) => {
     try {
-      const data = localStorage.getItem(`exercise_${name}`)
-      return data ? JSON.parse(data) : null
+      setLoading(true)
+      await initializeDefaultExercises(userId)
+      const data = await getExercises(userId)
+      setExercises(data)
     } catch (error) {
-      console.error('Error reading exercise data:', error)
-      return null
+      console.error('Error loading exercises:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const saveExerciseData = (exercise: Exercise) => {
+  const saveExerciseData = async (exercise: Exercise) => {
+    if (!session?.user.id || !exercise.id) return
+    
     try {
-      localStorage.setItem(`exercise_${exercise.name}`, JSON.stringify(exercise))
-      setExercises(prev => 
-        prev.map(ex => ex.name === exercise.name ? exercise : ex)
-      )
+      const lastSession = exercise.sessions[exercise.sessions.length - 1]
+      await saveSession(exercise.id, lastSession)
+      await loadExercises(session.user.id)
     } catch (error) {
       console.error('Error saving exercise data:', error)
     }
   }
 
+  if (!session) {
+    return <AuthComponent />
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 flex flex-col">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-md p-6 flex-grow">
-        <div className="flex items-center gap-2 mb-6">
-          <Dumbbell className="w-8 h-8 text-blue-500" />
-          <h1 className="text-2xl font-bold">Fitness Tracker</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Dumbbell className="w-8 h-8 text-blue-500" />
+            <h1 className="text-2xl font-bold">Fitness Tracker</h1>
+          </div>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            <LogOut size={20} />
+            Sign Out
+          </button>
         </div>
 
         <ExerciseTable 

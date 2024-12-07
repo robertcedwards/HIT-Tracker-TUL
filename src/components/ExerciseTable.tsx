@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Exercise, Session, addExercise, removeExercise } from '../types/Exercise';
+import { Exercise, Session } from '../types/Exercise';
 import { AllSessionsGraph } from './AllSessionsGraph';
 import { Play, Square, Volume2, VolumeX, Trash2, Plus } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
+import { addNewExercise, deleteExercise } from '../lib/database';
+import { supabase } from '../lib/supabase';
 
 interface ExerciseTableProps {
   exercises: Exercise[];
@@ -184,34 +186,41 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     }
   };
 
-  const handleDeleteExercise = (exerciseName: string) => {
-    setExerciseToDelete(exerciseName);
+  const handleDeleteExercise = (exercise: Exercise) => {
+    if (!exercise.id) return;
+    setExerciseToDelete(exercise.name);
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (exerciseToDelete) {
-      removeExercise(exerciseToDelete);
-      setLocalExercises(prev => prev.filter(ex => ex.name !== exerciseToDelete));
-      localStorage.removeItem(`exercise_${exerciseToDelete}`);
-      setShowDeleteModal(false);
-      setExerciseToDelete(null);
+      const exercise = localExercises.find(ex => ex.name === exerciseToDelete);
+      if (!exercise?.id) return;
+
+      try {
+        await deleteExercise(exercise.id);
+        setLocalExercises(prev => prev.filter(ex => ex.name !== exerciseToDelete));
+        setShowDeleteModal(false);
+        setExerciseToDelete(null);
+      } catch (error) {
+        console.error('Error deleting exercise:', error);
+      }
     }
   };
 
-  const handleAddExercise = (e: React.FormEvent) => {
+  const handleAddExercise = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newExerciseName.trim()) {
-      const added = addExercise(newExerciseName.trim());
-      if (added) {
-        const newExercise: Exercise = {
-          name: newExerciseName.trim(),
-          sessions: [],
-          lastUpdated: new Date().toISOString()
-        };
+      try {
+        const user = (await supabase.auth.getUser()).data.user;
+        if (!user) return;
+
+        const newExercise = await addNewExercise(newExerciseName.trim(), user.id);
         setLocalExercises(prev => [...prev, newExercise]);
         onSaveExercise(newExercise);
         setNewExerciseName('');
+      } catch (error) {
+        console.error('Error adding exercise:', error);
       }
     }
   };
@@ -308,7 +317,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                   </td>
                   <td className="px-4 py-2">
                     <button
-                      onClick={() => handleDeleteExercise(exercise.name)}
+                      onClick={() => exercise.id && handleDeleteExercise(exercise)}
                       className="text-red-500 hover:text-red-700"
                       title="Delete exercise"
                     >
