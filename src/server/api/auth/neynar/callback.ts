@@ -15,8 +15,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { signer } = await client.signInWithNeynar.verify(code);
-    const { user } = await client.lookupUserBySigner({ signerUuid: signer.signerUuid });
+    const { signer } = await client.signIn.verify(code);
+    const { user } = await client.lookupSigner({ signerUuid: signer.signerUuid });
 
     const { error } = await supabase.auth.signUp({
       email: `${user.username}@farcaster.xyz`,
