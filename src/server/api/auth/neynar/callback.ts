@@ -15,12 +15,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const signer = await client.validateSigner(code);
-    const { user } = await client.lookupSigner({ signer_uuid: signer.signer_uuid });
+    const { signer } = await client.signInWithNeynar.verify(code);
+    const { user } = await client.lookupUserBySigner({ signerUuid: signer.signerUuid });
 
     const { error } = await supabase.auth.signUp({
       email: `${user.username}@farcaster.xyz`,
-      password: signer.signer_uuid,
+      password: signer.signerUuid,
       options: {
         data: {
           farcaster_id: user.fid,
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
-    return Response.redirect(`${config.appUrl}?token=${signer.signer_uuid}`);
+    return Response.redirect(`${config.appUrl}?token=${signer.signerUuid}`);
   } catch (error) {
     console.error('Neynar callback error:', error);
     return new Response('Authentication failed', { status: 500 });
