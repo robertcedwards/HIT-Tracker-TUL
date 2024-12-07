@@ -74,7 +74,7 @@ function App() {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                   <Dumbbell className="w-8 h-8 text-blue-500" />
-                  <h1 className="text-2xl font-bold">Fitness Tracker</h1>
+                  <h1 className="text-2xl font-bold">Hit Flow</h1>
                 </div>
                 <button
                   onClick={() => supabase.auth.signOut()}
