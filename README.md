@@ -1,4 +1,4 @@
-## Hit Flow
+## Hit Flow.xyz
 
 Track your high-intensity training sessions with precision. Hit Flow helps you monitor your time under load and progress over time.
 
