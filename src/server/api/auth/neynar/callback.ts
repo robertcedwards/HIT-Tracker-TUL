@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { success, data } = await client.verifySignInAttempt(code);
+    const { success, data } = await client.signIn.verify(code);
     if (!success) {
       throw new Error('Sign in verification failed');
     }
