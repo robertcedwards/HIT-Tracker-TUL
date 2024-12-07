@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { config } from '../lib/config';
 
 export function useFarcasterAuth() {

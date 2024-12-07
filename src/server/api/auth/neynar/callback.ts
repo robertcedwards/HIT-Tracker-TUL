@@ -1,7 +1,10 @@
 import { NeynarAPIClient } from '@neynar/nodejs-sdk';
 import { supabase } from '../../../../lib/supabase';
+import { config } from '../../../../lib/config';
 
-const client = new NeynarAPIClient(process.env.NEYNAR_API_KEY);
+const client = new NeynarAPIClient({
+  apiKey: config.neynarApiKey
+});
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -12,26 +15,25 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { token } = await client.verifySignInAttempt(code);
-    const { user } = await client.lookupUserByVerificationToken(token);
+    const { token } = await client.signIn.verify(code);
+    const user = await client.user.getUser(token);
 
-    // Create or update user in Supabase
-    const { data: supabaseUser, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email: `${user.username}@farcaster.xyz`,
-      password: token, // You might want to handle this differently
+      password: token,
       options: {
         data: {
           farcaster_id: user.fid,
           username: user.username,
-          display_name: user.display_name,
-          avatar_url: user.pfp_url,
+          display_name: user.displayName,
+          avatar_url: user.pfp.url,
         },
       },
     });
 
     if (error) throw error;
 
-    return Response.redirect(`${process.env.VITE_APP_URL}?token=${token}`);
+    return Response.redirect(`${config.appUrl}?token=${token}`);
   } catch (error) {
     console.error('Neynar callback error:', error);
     return new Response('Authentication failed', { status: 500 });

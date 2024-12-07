@@ -5,4 +5,6 @@ if (!config.neynarApiKey) {
   throw new Error('Missing Neynar API key');
 }
 
-export const neynarClient = new NeynarAPIClient(config.neynarApiKey); 
+export const neynarClient = new NeynarAPIClient({
+  apiKey: config.neynarApiKey
+}); 
