@@ -294,17 +294,17 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                     <div className="flex items-center gap-4">
                       <button
                         onClick={() => handleStartTimer(exercise.name)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg focus:ring-2 focus:outline-none ${
                           isTimerActive
-                            ? 'bg-red-500 hover:bg-red-600 text-white'
-                            : 'bg-blue-500 hover:bg-blue-600 text-white'
+                            ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500'
+                            : 'bg-blue-700 hover:bg-blue-800 text-white focus:ring-blue-500'
                         }`}
                       >
                         {isTimerActive ? <Square size={16} /> : <Play size={16} />}
                         {isTimerActive ? `Stop (${timerState.time}s)` : 'Start'}
                       </button>
                       {isTimerActive && lastSession && (
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-gray-700">
                           {lastSession.timeUnderLoad - timerState.time > 0 && 
                            lastSession.timeUnderLoad - timerState.time <= timerSettings.countdownTime && 
                             `${lastSession.timeUnderLoad - timerState.time}s to go`

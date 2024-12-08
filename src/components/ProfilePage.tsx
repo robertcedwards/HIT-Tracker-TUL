@@ -131,22 +131,22 @@ export function ProfilePage() {
           <div className="space-y-4">
             <button
               onClick={handleExportData}
-              className="w-full flex items-center justify-between p-4 text-left text-gray-600 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"
+              className="w-full flex items-center justify-between p-4 text-left text-gray-700 bg-gray-50 rounded-2xl hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
             >
               <div>
                 <div className="font-medium">Export Your Data</div>
-                <div className="text-sm text-gray-500">Download all your exercise data as JSON</div>
+                <div className="text-sm text-gray-600">Download all your exercise data as JSON</div>
               </div>
               <Download size={20} />
             </button>
 
             <button
               onClick={() => setIsDeleting(true)}
-              className="w-full flex items-center justify-between p-4 text-left text-red-600 bg-red-50 rounded-2xl hover:bg-red-100 transition-colors"
+              className="w-full flex items-center justify-between p-4 text-left text-red-700 bg-red-50 rounded-2xl hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
             >
               <div>
                 <div className="font-medium">Delete Account</div>
-                <div className="text-sm text-red-500">Permanently delete your account and all data</div>
+                <div className="text-sm text-red-600">Permanently delete your account and all data</div>
               </div>
               <Trash2 size={20} />
             </button>

@@ -36,7 +36,7 @@ export function AuthComponent() {
               <CheckCircle className="mr-2 text-green-500" size={24} />
               Data Usage
             </h3>
-            <div className="text-gray-600">
+            <div className="text-gray-700">
               <p className="mb-2">We request access to your data for:</p>
               <ul className="list-disc list-inside space-y-2">
                 <li>Email: Account authentication only</li>
@@ -44,8 +44,10 @@ export function AuthComponent() {
                 <li>Session history: Performance visualization</li>
               </ul>
               <p className="mt-2">
-                <a href="/privacy" className="text-blue-500 hover:text-blue-600">
-                  View our Privacy Policy →
+                <a href="/privacy" className="inline-flex items-center text-blue-700 hover:text-blue-800 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1">
+                  View our Privacy Policy 
+                  <span className="ml-1" aria-hidden="true">→</span>
+                  <span className="sr-only">(opens privacy policy)</span>
                 </a>
               </p>
             </div>
@@ -53,10 +55,10 @@ export function AuthComponent() {
 
           <section>
             <h3 className="text-lg font-semibold mb-2 flex items-center">
-              <Clock className="mr-2 text-yellow-500" size={24} />
+              <Clock className="mr-2 text-yellow-600" size={24} />
               Features
             </h3>
-            <ul className="list-disc list-inside space-y-2 text-gray-600">
+            <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>Track weights and time under load</li>
               <li>Audio countdown alerts</li>
               <li>Progress visualization</li>

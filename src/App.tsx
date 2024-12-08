@@ -121,16 +121,16 @@ function App() {
                   <div className="flex flex-col items-center gap-4">
                     <button 
                       onClick={() => setShowModal(true)} 
-                      className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-2xl hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-700 text-white rounded-2xl hover:bg-blue-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
                     >
                       <InfoIcon size={20} />
                       More Info
                     </button>
                     <div className="flex gap-6 text-sm">
-                      <Link to="/privacy" className="text-gray-600 hover:text-gray-800 transition-colors">
+                      <Link to="/privacy" className="text-gray-700 hover:text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 transition-colors">
                         Privacy Policy
                       </Link>
-                      <Link to="/terms" className="text-gray-600 hover:text-gray-800 transition-colors">
+                      <Link to="/terms" className="text-gray-700 hover:text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 transition-colors">
                         Terms of Service
                       </Link>
                     </div>

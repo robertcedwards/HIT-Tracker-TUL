@@ -1,0 +1,10 @@
+# https://hitflow.xyz
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://hitflow.xyz/sitemap.xml
+
+# Disallow private routes
+Disallow: /profile
+Disallow: /api/ 
