@@ -62,6 +62,13 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
 
   useEffect(() => {
     setLocalExercises(exercises);
+    // Update weights when exercises change
+    const newWeights: Record<string, number> = {};
+    exercises.forEach(exercise => {
+      const lastSession = exercise.sessions[exercise.sessions.length - 1];
+      newWeights[exercise.name] = lastSession?.weight || 0;
+    });
+    setWeights(newWeights);
   }, [exercises]);
 
   useEffect(() => {
