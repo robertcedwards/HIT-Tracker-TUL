@@ -17,12 +17,14 @@ function App() {
   const [showModal, setShowModal] = useState(false)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [session, setSession] = useState<Session | null>(null)
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) {
+      if (session && !initialized) {
         loadExercises(session.user.id, true)
+        setInitialized(true)
       }
     })
 
@@ -36,7 +38,7 @@ function App() {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [initialized])
 
   const loadExercises = async (userId: string, shouldInitialize: boolean) => {
     try {
