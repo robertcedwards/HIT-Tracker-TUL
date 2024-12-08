@@ -10,81 +10,105 @@ export function PrivacyPolicy() {
           Back to App
         </Link>
         
-        <h1 className="text-3xl font-bold mb-6">Privacy Policy</h1>
+        <h1 className="text-3xl font-bold mb-6">Hit Flow Privacy Policy</h1>
+        <p className="text-sm text-gray-500 mb-6">Last Updated: December 8, 2023</p>
         
         <div className="space-y-6 text-gray-600">
           <section>
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">Data Collection and Storage</h2>
-            <p>We collect and store the following information:</p>
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">Introduction</h2>
+            <p>Hit Flow ("we", "our", or "us") is committed to protecting your privacy. This policy explains how we handle your data when you use our high-intensity training tracking application at hitflow.xyz.</p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">Google User Data</h2>
+            <p className="mb-2">When you sign in with Google, we access:</p>
+            <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
+              <li>Your Google email address for account authentication</li>
+              <li>Basic profile information (name and profile picture)</li>
+            </ul>
+            <p className="mt-2">This data is used exclusively for:</p>
+            <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
+              <li>Creating and managing your Hit Flow account</li>
+              <li>Displaying your profile information within the app</li>
+              <li>Account-related communications</li>
+            </ul>
+            <p className="mt-2">We do not:</p>
+            <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
+              <li>Share your Google data with third parties</li>
+              <li>Use your data for advertising purposes</li>
+              <li>Access any other Google account information</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">Exercise Data Collection</h2>
+            <p>We collect and store:</p>
             <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
               <li>Exercise data (names, weights, and durations)</li>
               <li>Session timestamps</li>
-              <li>Authentication information (email for login)</li>
+              <li>Performance metrics</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">Data Usage</h2>
-            <p>Your data is used exclusively to:</p>
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">Data Storage and Security</h2>
+            <p>Your data is protected by:</p>
             <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
-              <li>Track your exercise progress</li>
-              <li>Generate performance graphs</li>
-              <li>Provide personalized exercise history</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">Data Protection</h2>
-            <p>We protect your data by:</p>
-            <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
-              <li>Using Supabase's secure infrastructure</li>
-              <li>Implementing row-level security</li>
-              <li>Encrypting all data in transit and at rest</li>
+              <li>Secure hosting on Supabase's infrastructure</li>
+              <li>Encryption in transit and at rest</li>
+              <li>Row-level security policies</li>
+              <li>Regular security audits</li>
             </ul>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-gray-800 mb-3">Your Data Rights</h2>
-            <p>You have complete control over your data. Through your profile page, you can:</p>
+            <p>Through your profile page, you can:</p>
             <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
-              <li>Export all your data in JSON format at any time</li>
-              <li>Download a complete history of your exercises and sessions</li>
-              <li>Permanently delete your account and all associated data</li>
-              <li>Access and review all your stored information</li>
+              <li>Export all your data in JSON format</li>
+              <li>Delete your account and all associated data</li>
+              <li>Review and manage your stored information</li>
+              <li>Revoke Google access permissions</li>
             </ul>
-            <p className="mt-3 text-sm">
-              To manage your data, visit your <Link to="/profile" className="text-blue-500 hover:text-blue-600">Profile Settings</Link> page.
-            </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-gray-800 mb-3">Analytics</h2>
-            <p>We use Umami Analytics to collect anonymous usage data. This helps us improve the app and includes:</p>
+            <p>We use Umami Analytics to collect anonymous usage data:</p>
             <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
               <li>Page views and basic usage patterns</li>
               <li>No personal information is collected</li>
               <li>No cookies are used</li>
-              <li>Data is anonymized and cannot be traced back to individuals</li>
+              <li>Data is anonymized</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">Data Retention</h2>
-            <p>Your data is retained as follows:</p>
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">Policy Updates</h2>
+            <p>When we make changes to this policy:</p>
             <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
-              <li>Active accounts: Data is stored until you choose to delete it</li>
-              <li>Account deletion: All data is permanently removed upon account deletion</li>
-              <li>Exports: Downloaded data files are not retained on our servers</li>
+              <li>Users will be notified via email of significant changes</li>
+              <li>Updates will be posted on this page with a new "Last Updated" date</li>
+              <li>Changes affecting Google user data will be clearly highlighted</li>
+              <li>Users may be required to acknowledge significant changes</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">Contact</h2>
-            <p>For any privacy-related questions or concerns, you can:</p>
+            <h2 className="text-xl font-semibold text-gray-800 mb-3">Contact Information</h2>
+            <p>For privacy-related questions or concerns:</p>
             <ul className="list-disc list-inside ml-4 mt-2 space-y-2">
-              <li>Visit your profile page to manage your data</li>
-              <li>Contact us on <a href="https://warpcast.com/0xhashbrown" className="text-blue-500 hover:text-blue-600">Warpcast @0xhashbrown</a></li>
+              <li>Email: privacy@hitflow.xyz</li>
+              <li>Warpcast: <a href="https://warpcast.com/0xhashbrown" className="text-blue-500 hover:text-blue-600">@0xhashbrown</a></li>
+              <li>Visit your profile page to manage data settings</li>
             </ul>
+          </section>
+
+          <section className="mt-8 pt-8 border-t">
+            <p className="text-sm text-gray-500">
+              This privacy policy is specific to Hit Flow and was last updated on December 8, 2023. 
+              The policy is hosted on our verified domain hitflow.xyz and applies to all users of the application.
+            </p>
           </section>
         </div>
       </div>
