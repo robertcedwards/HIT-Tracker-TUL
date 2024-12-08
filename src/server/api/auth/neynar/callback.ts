@@ -1,4 +1,4 @@
-import { NeynarProvider } from '@neynar/react-sdk';
+import { NeynarProvider } from '@neynar/react';
 import { supabase } from '../../../../lib/supabase';
 import { config } from '../../../../lib/config';
 
