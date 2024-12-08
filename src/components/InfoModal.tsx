@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X, CheckCircle, Clock, BarChart2, Info } from 'lucide-react';
+import { X, CheckCircle, Clock, BarChart2 } from 'lucide-react';
 
 interface InfoModalProps {
   onClose: () => void;
