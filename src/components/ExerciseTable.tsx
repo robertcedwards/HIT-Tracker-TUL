@@ -195,20 +195,27 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
 
   const handleDeleteExercise = (exercise: Exercise) => {
     if (!exercise.id) return;
-    setExerciseToDelete(exercise.name);
+    setExerciseToDelete(exercise.id);
     setShowDeleteModal(true);
   };
 
   const confirmDelete = async () => {
     if (exerciseToDelete) {
-      const exercise = localExercises.find(ex => ex.name === exerciseToDelete);
+      const exercise = localExercises.find(ex => ex.id === exerciseToDelete);
       if (!exercise?.id) return;
 
       try {
-        await deleteExercise(exercise.id);
-        setLocalExercises(prev => prev.filter(ex => ex.name !== exerciseToDelete));
+        const user = (await supabase.auth.getUser()).data.user;
+        if (!user) return;
+
+        await deleteExercise(exercise.id, user.id);
+        setLocalExercises(prev => prev.filter(ex => ex.id !== exerciseToDelete));
         setShowDeleteModal(false);
         setExerciseToDelete(null);
+        
+        // Trigger parent refresh
+        const updatedExercise = { ...exercise };
+        onSaveExercise(updatedExercise);
       } catch (error) {
         console.error('Error deleting exercise:', error);
       }

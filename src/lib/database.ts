@@ -88,11 +88,12 @@ export async function saveSession(exerciseId: string, session: Omit<Session, 'id
   return data;
 }
 
-export async function deleteExercise(id: string) {
+export async function deleteExercise(exerciseId: string, userId: string) {
   const { error } = await supabase
     .from('exercises')
     .delete()
-    .eq('id', id);
+    .eq('id', exerciseId)
+    .eq('user_id', userId);
 
   if (error) throw error;
 }
