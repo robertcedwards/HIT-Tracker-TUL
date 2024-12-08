@@ -69,45 +69,60 @@ function App() {
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/" element={
-          <div className="min-h-screen bg-slate-50 p-4 flex flex-col">
-            <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-md p-6 flex-grow">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <Dumbbell className="w-8 h-8 text-blue-500" />
-                  <h1 className="text-2xl font-bold">Hit Flow</h1>
+          <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+            <div className="max-w-6xl mx-auto p-6">
+              {/* Header */}
+              <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-xl">
+                      <Dumbbell className="w-8 h-8 text-blue-500" />
+                    </div>
+                    <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-500">
+                      Hit Flow
+                    </h1>
+                  </div>
+                  <button
+                    onClick={() => supabase.auth.signOut()}
+                    className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                  >
+                    <LogOut size={20} />
+                    Sign Out
+                  </button>
                 </div>
-                <button
-                  onClick={() => supabase.auth.signOut()}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  <LogOut size={20} />
-                  Sign Out
-                </button>
               </div>
 
-              <ExerciseTable 
-                exercises={exercises}
-                onSaveExercise={saveExerciseData}
-              />
+              {/* Main Content */}
+              <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
+                <ExerciseTable 
+                  exercises={exercises}
+                  onSaveExercise={saveExerciseData}
+                />
+              </div>
+
+              {showModal && <InfoModal onClose={() => setShowModal(false)} />}
+
+              {/* Footer */}
+              <footer className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6">
+                <div className="flex flex-col items-center gap-4">
+                  <button 
+                    onClick={() => setShowModal(true)} 
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-2xl hover:opacity-90 transition-opacity"
+                  >
+                    <InfoIcon size={20} />
+                    More Info
+                  </button>
+                  <div className="flex gap-6 text-sm">
+                    <Link to="/privacy" className="text-gray-600 hover:text-gray-800 transition-colors">
+                      Privacy Policy
+                    </Link>
+                    <Link to="/terms" className="text-gray-600 hover:text-gray-800 transition-colors">
+                      Terms of Service
+                    </Link>
+                  </div>
+                </div>
+              </footer>
             </div>
-
-            {showModal && <InfoModal onClose={() => setShowModal(false)} />}
-
-            <footer className="bg-gray-50 p-4 text-center sticky bottom-0">
-              <div className="flex justify-center space-x-4">
-                <button 
-                  onClick={() => setShowModal(true)} 
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                >
-                  <InfoIcon size={20} />
-                  More Info
-                </button>
-              </div>
-              <div className="mt-4 text-sm text-gray-500">
-                <Link to="/privacy" className="hover:text-gray-700 mr-4">Privacy Policy</Link>
-                <Link to="/terms" className="hover:text-gray-700">Terms of Service</Link>
-              </div>
-            </footer>
           </div>
         } />
       </Routes>
