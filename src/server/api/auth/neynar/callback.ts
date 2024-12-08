@@ -1,8 +1,8 @@
-import { NeynarAPIClient } from '@neynar/nodejs-sdk';
+import { NeynarProvider } from '@neynar/react-sdk';
 import { supabase } from '../../../../lib/supabase';
 import { config } from '../../../../lib/config';
 
-const client = new NeynarAPIClient(config.neynarApiKey);
+const client = new NeynarProvider({ apiKey: config.neynarApiKey });
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
