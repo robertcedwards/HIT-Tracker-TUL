@@ -7,7 +7,7 @@ import { InfoModal } from './components/InfoModal'
 import { AuthComponent } from './components/Auth'
 import { supabase } from './lib/supabase'
 import { Session } from '@supabase/supabase-js'
-import { initializeDefaultExercises, getExercises, saveSession } from './lib/database'
+import { getExercises, saveSession } from './lib/database'
 import { BrowserRouter as Router, Routes, Route, Link} from 'react-router-dom'
 import { PrivacyPolicy } from './components/PrivacyPolicy'
 import { Terms } from './components/Terms'
@@ -22,7 +22,7 @@ function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) {
-        loadExercises(session.user.id)
+        loadExercises(session.user.id, true)
       }
     })
 
@@ -31,17 +31,16 @@ function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (session) {
-        loadExercises(session.user.id)
+        loadExercises(session.user.id, false)
       }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  const loadExercises = async (userId: string) => {
+  const loadExercises = async (userId: string, shouldInitialize: boolean) => {
     try {
-      await initializeDefaultExercises(userId)
-      const data = await getExercises(userId)
+      const data = await getExercises(userId, shouldInitialize)
       setExercises(data)
     } catch (error) {
       console.error('Error loading exercises:', error)
@@ -54,7 +53,7 @@ function App() {
     try {
       const lastSession = exercise.sessions[exercise.sessions.length - 1]
       await saveSession(exercise.id, lastSession)
-      await loadExercises(session.user.id)
+      await loadExercises(session.user.id, false)
     } catch (error) {
       console.error('Error saving exercise data:', error)
     }

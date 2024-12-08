@@ -1,7 +1,11 @@
 import { supabase } from './supabase';
 import { Exercise, Session, DEFAULT_EXERCISES } from '../types/Exercise';
 
-export async function getExercises(userId: string): Promise<Exercise[]> {
+export async function getExercises(userId: string, shouldInitialize = false): Promise<Exercise[]> {
+  if (shouldInitialize) {
+    await initializeDefaultExercises(userId);
+  }
+
   const { data: exercises, error } = await supabase
     .from('exercises')
     .select(`
