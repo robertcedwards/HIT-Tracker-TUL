@@ -40,6 +40,7 @@ export async function getExercises(userId: string, shouldInitialize = false): Pr
 }
 
 export async function initializeDefaultExercises(userId: string) {
+  // Get all existing exercises for the user
   const { data: existing, error } = await supabase
     .from('exercises')
     .select('name')
@@ -47,12 +48,12 @@ export async function initializeDefaultExercises(userId: string) {
 
   if (error) throw error;
 
-  // Get names of existing exercises
-  const existingNames = new Set(existing?.map(e => e.name) || []);
+  // Create a Set of existing exercise names for efficient lookup
+  const existingNames = new Set(existing?.map(e => e.name.trim().toLowerCase()) || []);
   
-  // Only add exercises that don't already exist
+  // Filter out exercises that already exist (case-insensitive)
   const exercisesToAdd = DEFAULT_EXERCISES
-    .filter(name => !existingNames.has(name))
+    .filter(name => !existingNames.has(name.toLowerCase()))
     .map(name => ({
       name,
       user_id: userId,

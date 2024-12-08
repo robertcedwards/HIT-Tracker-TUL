@@ -19,5 +19,5 @@ export const DEFAULT_EXERCISES = [
   'Shoulder Press',
   'Lat Pull Down',
   'Seated Row',
-  'Leg Press',
-];
+  'Leg Press'
+].sort();
