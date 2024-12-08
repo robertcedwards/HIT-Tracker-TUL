@@ -149,8 +149,6 @@ function App() {
 
 // Wrapper component to maintain auth layout for policy pages
 function AuthWrapper({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
-  
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
       <div className="max-w-3xl mx-auto">
