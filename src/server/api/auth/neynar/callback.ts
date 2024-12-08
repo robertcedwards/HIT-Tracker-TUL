@@ -1,10 +1,8 @@
-import { NeynarAPIClient } from '@neynar/nodejs-sdk';
+import { createSignedKeyRequestSigner } from '@neynar/nodejs-sdk';
 import { supabase } from '../../../../lib/supabase';
 import { config } from '../../../../lib/config';
 
-const client = new NeynarAPIClient({
-  apiKey: config.neynarApiKey
-});
+const client = createSignedKeyRequestSigner(config.neynarApiKey);
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -15,7 +13,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { success, data } = await client.signIn.verify(code);
+    const { success, data } = await client.verify(code);
     if (!success) {
       throw new Error('Sign in verification failed');
     }
