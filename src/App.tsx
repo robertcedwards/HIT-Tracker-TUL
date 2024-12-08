@@ -1,7 +1,7 @@
 import './index.css'
 import { ExerciseTable } from './components/ExerciseTable'
 import { Exercise } from './types/Exercise'
-import { Dumbbell, Info as InfoIcon, LogOut } from 'lucide-react'
+import { Dumbbell, Info as InfoIcon, LogOut, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { InfoModal } from './components/InfoModal'
 import { AuthComponent } from './components/Auth'
@@ -11,6 +11,7 @@ import { initializeDefaultExercises, getExercises, saveSession } from './lib/dat
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import { PrivacyPolicy } from './components/PrivacyPolicy'
 import { Terms } from './components/Terms'
+import { ProfilePage } from './components/ProfilePage'
 
 function App() {
   const [showModal, setShowModal] = useState(false)
@@ -68,6 +69,7 @@ function App() {
       <Routes>
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/" element={
           <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
             <div className="max-w-6xl mx-auto p-6">
@@ -82,13 +84,22 @@ function App() {
                       Hit Flow
                     </h1>
                   </div>
-                  <button
-                    onClick={() => supabase.auth.signOut()}
-                    className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
-                  >
-                    <LogOut size={20} />
-                    Sign Out
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      to="/profile"
+                      className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                    >
+                      <User size={20} />
+                      Profile
+                    </Link>
+                    <button
+                      onClick={() => supabase.auth.signOut()}
+                      className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                    >
+                      <LogOut size={20} />
+                      Sign Out
+                    </button>
+                  </div>
                 </div>
               </div>
 
