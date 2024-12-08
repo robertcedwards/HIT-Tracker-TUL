@@ -19,10 +19,10 @@ export function AuthComponent() {
       <div className="grid md:grid-cols-2 gap-8">
         <div className="space-y-6">
           <section>
-            <h3 className="text-lg font-semibold mb-2 flex items-center">
+            <h2 className="text-lg font-semibold mb-2 flex items-center">
               <Info className="mr-2 text-blue-500" size={24} />
               About Hit Flow
-            </h3>
+            </h2>
             <p className="text-gray-600">
               Hit Flow is a specialized tracking tool designed for high-intensity training protocols,
               focusing on time under load and weight progression. Created by{' '}
@@ -32,10 +32,10 @@ export function AuthComponent() {
           </section>
 
           <section>
-            <h3 className="text-lg font-semibold mb-2 flex items-center">
+            <h2 className="text-lg font-semibold mb-2 flex items-center">
               <CheckCircle className="mr-2 text-green-500" size={24} />
               Data Usage
-            </h3>
+            </h2>
             <div className="text-gray-700">
               <p className="mb-2">We request access to your data for:</p>
               <ul className="list-disc list-inside space-y-2">
@@ -54,10 +54,10 @@ export function AuthComponent() {
           </section>
 
           <section>
-            <h3 className="text-lg font-semibold mb-2 flex items-center">
+            <h2 className="text-lg font-semibold mb-2 flex items-center">
               <Clock className="mr-2 text-yellow-600" size={24} />
               Features
-            </h3>
+            </h2>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>Track weights and time under load</li>
               <li>Audio countdown alerts</li>
@@ -67,10 +67,10 @@ export function AuthComponent() {
           </section>
 
           <section>
-            <h3 className="text-lg font-semibold mb-2 flex items-center">
+            <h2 className="text-lg font-semibold mb-2 flex items-center">
               <BarChart2 className="mr-2 text-purple-500" size={24} />
               Your Data Control
-            </h3>
+            </h2>
             <ul className="list-disc list-inside space-y-2 text-gray-600">
               <li>Export your data anytime</li>
               <li>Delete your account and data permanently</li>

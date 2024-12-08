@@ -339,7 +339,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
       
 
       <div className="mb-8 border-t pt-8">
-        <h3 className="text-lg font-semibold mb-4">Add New Exercise</h3>
+        <h2 className="text-lg font-semibold mb-4">Add New Exercise</h2>
         <form onSubmit={handleAddExercise} className="flex gap-2">
           <input
             type="text"
