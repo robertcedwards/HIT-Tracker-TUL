@@ -1,8 +1,8 @@
-import { createSignedKeyRequestSigner } from '@neynar/nodejs-sdk';
+import { SignedKeyRequest } from '@neynar/nodejs-sdk';
 import { supabase } from '../../../../lib/supabase';
 import { config } from '../../../../lib/config';
 
-const client = createSignedKeyRequestSigner(config.neynarApiKey);
+const client = new SignedKeyRequest(config.neynarApiKey);
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
