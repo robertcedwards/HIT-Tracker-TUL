@@ -40,7 +40,6 @@ export async function getExercises(userId: string, shouldInitialize = false): Pr
 }
 
 export async function initializeDefaultExercises(userId: string) {
-  // Get all existing exercises for the user
   const { data: existing, error } = await supabase
     .from('exercises')
     .select('name')
@@ -61,9 +60,13 @@ export async function initializeDefaultExercises(userId: string) {
     }));
 
   if (exercisesToAdd.length > 0) {
+    // Use upsert with unique constraint on name and user_id to prevent duplicates
     const { error: insertError } = await supabase
       .from('exercises')
-      .insert(exercisesToAdd);
+      .upsert(exercisesToAdd, {
+        onConflict: 'user_id,name',
+        ignoreDuplicates: true
+      });
 
     if (insertError) throw insertError;
   }
