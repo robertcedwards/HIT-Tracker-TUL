@@ -40,36 +40,31 @@ export async function getExercises(userId: string, shouldInitialize = false): Pr
 }
 
 export async function initializeDefaultExercises(userId: string) {
+  // First, get all exercises in a transaction
   const { data: existing, error } = await supabase
     .from('exercises')
-    .select('name')
+    .select('*')
     .eq('user_id', userId);
 
   if (error) throw error;
 
-  // Create a Set of existing exercise names for efficient lookup
-  const existingNames = new Set(existing?.map(e => e.name.trim().toLowerCase()) || []);
-  
-  // Filter out exercises that already exist (case-insensitive)
-  const exercisesToAdd = DEFAULT_EXERCISES
-    .filter(name => !existingNames.has(name.toLowerCase()))
-    .map(name => ({
-      name,
-      user_id: userId,
-      last_updated: new Date().toISOString()
-    }));
-
-  if (exercisesToAdd.length > 0) {
-    // Use upsert with unique constraint on name and user_id to prevent duplicates
-    const { error: insertError } = await supabase
-      .from('exercises')
-      .upsert(exercisesToAdd, {
-        onConflict: 'user_id,name',
-        ignoreDuplicates: true
-      });
-
-    if (insertError) throw insertError;
+  // If user already has exercises, don't initialize
+  if (existing && existing.length > 0) {
+    return;
   }
+
+  // If no exercises exist, add all default exercises at once
+  const exercisesToAdd = DEFAULT_EXERCISES.map(name => ({
+    name,
+    user_id: userId,
+    last_updated: new Date().toISOString()
+  }));
+
+  const { error: insertError } = await supabase
+    .from('exercises')
+    .insert(exercisesToAdd);
+
+  if (insertError) throw insertError;
 }
 
 export async function saveSession(exerciseId: string, session: Omit<Session, 'id' | 'exercise_id'>) {
