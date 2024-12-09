@@ -12,6 +12,7 @@ import { BrowserRouter as Router, Routes, Route, Link} from 'react-router-dom'
 import { PrivacyPolicy } from './components/PrivacyPolicy'
 import { Terms } from './components/Terms'
 import { ProfilePage } from './components/ProfilePage'
+import { WeightUnitProvider } from './contexts/WeightUnitContext'
 
 function App() {
   const [showModal, setShowModal] = useState(false)
@@ -62,89 +63,91 @@ function App() {
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/privacy" element={
-          session ? <PrivacyPolicy /> : <AuthWrapper><PrivacyPolicy /></AuthWrapper>
-        } />
-        <Route path="/terms" element={
-          session ? <Terms /> : <AuthWrapper><Terms /></AuthWrapper>
-        } />
-        <Route path="/profile" element={
-          session ? <ProfilePage /> : <AuthComponent />
-        } />
-        <Route path="/" element={
-          session ? (
-            <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-              <div className="max-w-6xl mx-auto p-6">
-                {/* Header */}
-                <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-xl">
-                        <Dumbbell className="w-8 h-8 text-blue-500" />
+    <WeightUnitProvider>
+      <Router>
+        <Routes>
+          <Route path="/privacy" element={
+            session ? <PrivacyPolicy /> : <AuthWrapper><PrivacyPolicy /></AuthWrapper>
+          } />
+          <Route path="/terms" element={
+            session ? <Terms /> : <AuthWrapper><Terms /></AuthWrapper>
+          } />
+          <Route path="/profile" element={
+            session ? <ProfilePage /> : <AuthComponent />
+          } />
+          <Route path="/" element={
+            session ? (
+              <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+                <div className="max-w-6xl mx-auto p-6">
+                  {/* Header */}
+                  <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 rounded-xl">
+                          <Dumbbell className="w-8 h-8 text-blue-500" />
+                        </div>
+                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-500">
+                          Hit Flow
+                        </h1>
                       </div>
-                      <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-500">
-                        Hit Flow
-                      </h1>
+                      <div className="flex items-center gap-3">
+                        <Link
+                          to="/profile"
+                          className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                        >
+                          <User size={20} />
+                          Profile
+                        </Link>
+                        <button
+                          onClick={() => supabase.auth.signOut()}
+                          className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                        >
+                          <LogOut size={20} />
+                          Sign Out
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Link
-                        to="/profile"
-                        className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                  </div>
+
+                  {/* Main Content */}
+                  <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
+                    <ExerciseTable 
+                      exercises={exercises}
+                      onSaveExercise={saveExerciseData}
+                    />
+                  </div>
+
+                  {showModal && <InfoModal onClose={() => setShowModal(false)} />}
+
+                  {/* Footer */}
+                  <footer className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6">
+                    <div className="flex flex-col items-center gap-4">
+                      <button 
+                        onClick={() => setShowModal(true)} 
+                        className="flex items-center gap-2 px-6 py-3 bg-blue-700 text-white rounded-2xl hover:bg-blue-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
                       >
-                        <User size={20} />
-                        Profile
-                      </Link>
-                      <button
-                        onClick={() => supabase.auth.signOut()}
-                        className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
-                      >
-                        <LogOut size={20} />
-                        Sign Out
+                        <InfoIcon size={20} />
+                        More Info
                       </button>
+                      <div className="flex gap-6 text-sm">
+                        <Link to="/privacy" className="text-gray-700 hover:text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 transition-colors">
+                          Privacy Policy
+                        </Link>
+                        <Link to="/terms" className="text-gray-700 hover:text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 transition-colors">
+                          Terms of Service
+                        </Link>
+                      </div>
                     </div>
-                  </div>
+                  </footer>
                 </div>
-
-                {/* Main Content */}
-                <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-                  <ExerciseTable 
-                    exercises={exercises}
-                    onSaveExercise={saveExerciseData}
-                  />
-                </div>
-
-                {showModal && <InfoModal onClose={() => setShowModal(false)} />}
-
-                {/* Footer */}
-                <footer className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6">
-                  <div className="flex flex-col items-center gap-4">
-                    <button 
-                      onClick={() => setShowModal(true)} 
-                      className="flex items-center gap-2 px-6 py-3 bg-blue-700 text-white rounded-2xl hover:bg-blue-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors"
-                    >
-                      <InfoIcon size={20} />
-                      More Info
-                    </button>
-                    <div className="flex gap-6 text-sm">
-                      <Link to="/privacy" className="text-gray-700 hover:text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 transition-colors">
-                        Privacy Policy
-                      </Link>
-                      <Link to="/terms" className="text-gray-700 hover:text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1 transition-colors">
-                        Terms of Service
-                      </Link>
-                    </div>
-                  </div>
-                </footer>
               </div>
-            </div>
-          ) : (
-            <AuthComponent />
-          )
-        } />
-      </Routes>
-    </Router>
+            ) : (
+              <AuthComponent />
+            )
+          } />
+        </Routes>
+      </Router>
+    </WeightUnitProvider>
   );
 }
 

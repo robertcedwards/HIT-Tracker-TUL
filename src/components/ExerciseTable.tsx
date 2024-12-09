@@ -5,6 +5,7 @@ import { Play, Square, Volume2, VolumeX, Trash2, Plus } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { addNewExercise, deleteExercise } from '../lib/database';
 import { supabase } from '../lib/supabase';
+import { useWeightUnit } from '../contexts/WeightUnitContext';
 
 interface ExerciseTableProps {
   exercises: Exercise[];
@@ -23,6 +24,7 @@ interface TimerSettings {
 }
 
 export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps) {
+  const { weightUnit, toggleWeightUnit, convertWeight, formatWeight } = useWeightUnit();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
   const [timerState, setTimerState] = useState<TimerState>({
@@ -160,9 +162,11 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     } else {
       const numValue = Number(value);
       if (!isNaN(numValue)) {
+        // Convert input value from displayed unit to lbs for storage
+        const weightInLbs = weightUnit === 'kg' ? Math.round(numValue * 2.205) : numValue;
         setWeights(prev => ({
           ...prev,
-          [exerciseName]: numValue
+          [exerciseName]: weightInLbs
         }));
       }
     }
@@ -246,7 +250,15 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
           <thead>
             <tr className="bg-gray-50">
               <th className="px-4 py-2 text-left">Exercise</th>
-              <th className="px-4 py-2 text-left">Weight (lbs)</th>
+              <th className="px-4 py-2 text-left">
+                <button 
+                  onClick={toggleWeightUnit}
+                  className="hover:bg-gray-100 px-1 py-0.5 rounded"
+                  title="Click to toggle units"
+                >
+                  Weight ({weightUnit})
+                </button>
+              </th>
               <th className="px-4 py-2 text-left">
                 <div className="flex items-center gap-4">
                   Timer
@@ -291,10 +303,11 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                   <td className="px-4 py-2">
                     <input
                       type="number"
-                      value={weights[exercise.name] || ''}
+                      value={convertWeight(weights[exercise.name] || 0)}
                       onChange={(e) => handleWeightChange(exercise.name, e)}
                       className="w-24 p-1 border rounded"
                       min="0"
+                      step="1"
                     />
                   </td>
                   <td className="px-4 py-2">
@@ -323,7 +336,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                   <td className="px-4 py-2 text-gray-500">
                     {lastSession ? (
                       <>
-                        {lastSession.weight}lbs × {lastSession.timeUnderLoad}s
+                        {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
                       </>
                     ) : (
                       'No sessions yet'
