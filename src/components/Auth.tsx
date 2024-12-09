@@ -2,6 +2,7 @@ import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '../lib/supabase';
 import { Info, CheckCircle, Clock, BarChart2, Dumbbell } from 'lucide-react';
+import { DemoTable } from './DemoTable';
 
 export function AuthComponent() {
   return (
@@ -18,6 +19,11 @@ export function AuthComponent() {
 
       <div className="grid md:grid-cols-2 gap-8">
         <div className="space-y-6">
+          <section>
+            <h2 className="text-lg font-semibold mb-4">Try the Demo</h2>
+            <DemoTable />
+          </section>
+
           <section>
             <h2 className="text-lg font-semibold mb-2 flex items-center">
               <Info className="mr-2 text-blue-500" size={24} />
