@@ -20,11 +20,6 @@ export function AuthComponent() {
       <div className="grid md:grid-cols-2 gap-8">
         <div className="space-y-6">
           <section>
-            <h2 className="text-lg font-semibold mb-4">Try the Demo</h2>
-            <DemoTable />
-          </section>
-
-          <section>
             <h2 className="text-lg font-semibold mb-2 flex items-center">
               <Info className="mr-2 text-blue-500" size={24} />
               About Hit Flow
@@ -36,7 +31,10 @@ export function AuthComponent() {
               this app helps you optimize your strength training journey.
             </p>
           </section>
-
+          <section>
+            <h2 className="text-lg font-semibold mb-4">Try the Demo 👇</h2>
+            <DemoTable />
+          </section>
           <section>
             <h2 className="text-lg font-semibold mb-2 flex items-center">
               <CheckCircle className="mr-2 text-green-500" size={24} />
