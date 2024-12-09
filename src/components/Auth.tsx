@@ -32,7 +32,7 @@ export function AuthComponent() {
             </p>
           </section>
           <section>
-            <h2 className="text-lg font-semibold mb-4">Try the Demo 👇</h2>
+            <h2 className="text-lg font-semibold mb-4">Try the Demo 👇 (click to toggle units)</h2>
             <DemoTable />
           </section>
           <section>

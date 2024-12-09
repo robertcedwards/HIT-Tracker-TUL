@@ -7,6 +7,8 @@ type DemoExercise = {
   lastSession: string;
 };
 
+type WeightUnit = 'lbs' | 'kg';
+
 const DEMO_EXERCISES: DemoExercise[] = [
   { name: 'Chest Press', weight: 160, lastSession: '160lbs × 62s' },
   { name: 'Leg Press', weight: 430, lastSession: '430lbs × 66s' },
@@ -20,6 +22,15 @@ export function DemoTable() {
   });
   const [activeTimer, setActiveTimer] = useState<string | null>(null);
   const [time, setTime] = useState(0);
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('lbs');
+
+  const convertWeight = (weight: number, to: WeightUnit) => {
+    return to === 'kg' ? Math.round(weight / 2.205) : weight;
+  };
+
+  const formatWeight = (weight: number) => {
+    return `${convertWeight(weight, weightUnit)}${weightUnit}`;
+  };
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -43,9 +54,12 @@ export function DemoTable() {
 
   const handleStartTimer = (exerciseName: string) => {
     if (activeTimer === exerciseName) {
+      const exercise = exercises.find(ex => ex.name === exerciseName);
+      if (!exercise) return;
+      
       setExercises(prev => prev.map(ex => 
         ex.name === exerciseName
-          ? { ...ex, lastSession: `${ex.weight}lbs × ${time}s` }
+          ? { ...ex, lastSession: `${formatWeight(ex.weight)} × ${time}s` }
           : ex
       ));
       setActiveTimer(null);
@@ -64,13 +78,25 @@ export function DemoTable() {
     ));
   };
 
+  const toggleWeightUnit = () => {
+    setWeightUnit(prev => prev === 'lbs' ? 'kg' : 'lbs');
+  };
+
   return (
     <div className="overflow-x-auto mb-8 opacity-75">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50">
-            <th className="px-2 py-2 text-left">Exercise</th>
-            <th className="px-2 py-2 text-center whitespace-nowrap">🏋️‍♂️</th>
+            <th className="px-4 py-2 text-left">Exercise</th>
+            <th className="px-2 py-2 text-center whitespace-nowrap">
+              <button 
+                onClick={toggleWeightUnit}
+                className="hover:bg-gray-100 px-1 py-0.5 rounded"
+                title="Click to toggle units"
+              >
+                🏋️‍♂️ ({weightUnit})
+              </button>
+            </th>
             <th className="px-2 py-2 text-left">Timer</th>
             <th className="px-2 py-2 text-center">↩</th>
           </tr>
@@ -89,7 +115,7 @@ export function DemoTable() {
                   </button>
                   <input
                     type="number"
-                    value={exercise.weight}
+                    value={convertWeight(exercise.weight, weightUnit)}
                     className="w-12 p-0 border-y bg-gray-50 text-center"
                     disabled
                   />
