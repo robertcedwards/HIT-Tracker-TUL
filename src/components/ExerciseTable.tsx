@@ -6,6 +6,7 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { addNewExercise, deleteExercise } from '../lib/database';
 import { supabase } from '../lib/supabase';
 import { useWeightUnit } from '../contexts/WeightUnitContext';
+import { trackEvent } from '../lib/analytics';
 
 interface ExerciseTableProps {
   exercises: Exercise[];
@@ -116,6 +117,10 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
 
   const handleStartTimer = (exerciseName: string) => {
     if (timerState.isRunning && timerState.exerciseName === exerciseName) {
+      trackEvent('stop_timer', {
+        exercise: exerciseName,
+        duration: timerState.time
+      });
       const exercise = localExercises.find(e => e.name === exerciseName);
       if (!exercise) return;
 
@@ -143,6 +148,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         exerciseName: null
       });
     } else {
+      trackEvent('start_timer', { exercise: exerciseName });
       setTimerState({
         isRunning: true,
         time: 0,
@@ -154,6 +160,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   const handleWeightChange = (exerciseName: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     if (value === '') {
+      trackEvent('clear_weight', { exercise: exerciseName });
       setWeights(prev => {
         const newWeights = { ...prev };
         delete newWeights[exerciseName];
@@ -162,6 +169,11 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     } else {
       const numValue = Number(value);
       if (!isNaN(numValue)) {
+        trackEvent('change_weight', {
+          exercise: exerciseName,
+          value: numValue,
+          unit: weightUnit
+        });
         // Convert input value from displayed unit to lbs for storage
         const weightInLbs = weightUnit === 'kg' ? Math.round(numValue * 2.205) : numValue;
         setWeights(prev => ({
@@ -199,6 +211,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
 
   const handleDeleteExercise = (exercise: Exercise) => {
     if (!exercise.id) return;
+    trackEvent('delete_exercise', { name: exercise.name });
     setExerciseToDelete(exercise.id);
     setShowDeleteModal(true);
   };
@@ -229,6 +242,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   const handleAddExercise = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newExerciseName.trim()) {
+      trackEvent('add_exercise', { name: newExerciseName.trim() });
       try {
         const user = (await supabase.auth.getUser()).data.user;
         if (!user) return;
@@ -243,6 +257,14 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     }
   };
 
+  const handleWeightUnitToggle = () => {
+    trackEvent('toggle_weight_unit', {
+      from: weightUnit,
+      to: weightUnit === 'lbs' ? 'kg' : 'lbs'
+    });
+    toggleWeightUnit();
+  };
+
   return (
     <div>
       <div className="overflow-x-auto mb-8">
@@ -252,7 +274,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
               <th className="px-4 py-2 text-left">Exercise</th>
               <th className="px-4 py-2 text-left">
                 <button 
-                  onClick={toggleWeightUnit}
+                  onClick={handleWeightUnitToggle}
                   className="hover:bg-gray-100 px-1 py-0.5 rounded"
                   title="Click to toggle units"
                 >
@@ -265,7 +287,9 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                   <div className="flex items-center gap-2 text-gray-600">
                     <button
                       onClick={() => {
-                        updateTimerSettings({ soundEnabled: !timerSettings.soundEnabled });
+                        const newState = !timerSettings.soundEnabled;
+                        trackEvent('toggle_sound', { enabled: newState });
+                        updateTimerSettings({ soundEnabled: newState });
                         if (!timerSettings.soundEnabled) {
                           setTimeout(testSound, 100);
                         }
