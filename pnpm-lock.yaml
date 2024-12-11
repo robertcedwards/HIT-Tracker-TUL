@@ -14,6 +14,9 @@ dependencies:
   '@supabase/supabase-js':
     specifier: ^2.39.0
     version: 2.47.2
+  '@umami/node':
+    specifier: ^0.4.0
+    version: 0.4.0
   lucide-react:
     specifier: ^0.453.0
     version: 0.453.0(react@18.3.1)
@@ -868,6 +871,10 @@ packages:
     resolution: {integrity: sha512-osM/gWBTPKgHV8XkTunnegTRIsvF6owmf5w+JtAfOw472dptdm0dlGv4xCt6GwQRcC2XVOvvRE/0bAoQcL2QkA==}
     dependencies:
       '@types/node': 22.10.1
+    dev: false
+
+  /@umami/node@0.4.0:
+    resolution: {integrity: sha512-pyphprbiF7KiDSc+SWZ4/rVM8B5vU27zIiFfEPj2lEqczpI4xAKSp+dM3tlzyRAWJL32fcbCfAaLGhJZQV13Rg==}
     dev: false
 
   /@vitejs/plugin-react@4.3.4(vite@5.4.11):
