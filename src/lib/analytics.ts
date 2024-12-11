@@ -6,14 +6,6 @@ declare global {
   }
 }
 
-export const trackEvent = (eventName: string, data?: Record<string, any>) => {
-  try {
-    window.umami?.track(eventName, data);
-  } catch (error) {
-    console.warn('Analytics tracking failed:', error);
-  }
-}; 
-
 type EventName = 
   | 'toggle_weight_unit'
   | 'start_timer'
@@ -24,3 +16,11 @@ type EventName =
   | 'export_data'
   | 'change_weight'
   | 'clear_weight'; 
+
+export const trackEvent = (eventName: EventName, data?: Record<string, any>) => {
+  try {
+    window.umami?.track(eventName, data);
+  } catch (error) {
+    console.warn('Analytics tracking failed:', error);
+  }
+}; 
