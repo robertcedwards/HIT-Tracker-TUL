@@ -1,3 +1,5 @@
+# Blog Post about building Hitflow.xyz
+- [Building Hitflow.xyz - In a Week](https://build-and-beyond.ghost.io/building-hitflow-xyz/)
 # Hit Flow - High Intensity Training Tracker
 
 ![Hit Flow Screenshot](https://hitflow.xyz/screen-shot.png)
