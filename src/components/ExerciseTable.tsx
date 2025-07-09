@@ -445,7 +445,10 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                   <div className="flex-1 flex items-center min-w-0">
                     <h3 className="font-semibold text-2xl pr-2 break-words truncate">{exercise.name}</h3>
                     {lastSession && (
-                      <span className="ml-2 text-base text-gray-500 whitespace-nowrap font-normal">Last: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s</span>
+                      <span className="ml-2 text-base text-gray-500 whitespace-nowrap font-normal">
+                        Last:&nbsp;
+                        {new Date(lastSession.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -590,7 +593,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                     </div>
                     {lastSession && (
                       <div className="mt-1 text-sm text-gray-500">
-                        Last: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
+                        Previous: {new Date(lastSession.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} - {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
                       </div>
                     )}
                   </button>
