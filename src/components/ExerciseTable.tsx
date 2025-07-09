@@ -82,6 +82,12 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     }
   }, [activeExerciseId]);
 
+  // State for mobile previous sessions sheet
+  const [showMobileSessionsSheet, setShowMobileSessionsSheet] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionValues, setEditSessionValues] = useState<{ weight: string; timeUnderLoad: string }>({ weight: '', timeUnderLoad: '' });
+  const [mobileSessionsToShow, setMobileSessionsToShow] = useState(5);
+
   // Initialize audio element with correct path
   useEffect(() => {
     audioRef.current = new Audio('timer-beep.mp3');
@@ -440,35 +446,42 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
             const lastSession = exercise.sessions[exercise.sessions.length - 1];
             const isTimerActive = timerState.exerciseName === exercise.name;
             return (
-              <div className={`fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl border-t p-4 shadow-2xl flex flex-col max-h-[90vh] min-h-[33vh] transition-transform duration-700 ease-out ${activeExerciseId ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'} w-full`} style={{transitionProperty: 'transform, opacity'}}>
-                <div className="flex items-center justify-between mb-1 gap-2 w-full">
-                  <div className="flex-1 flex items-center min-w-0">
-                    <h3 className="font-semibold text-2xl pr-2 break-words truncate">{exercise.name}</h3>
-                    {lastSession && (
-                      <span className="ml-2 text-base text-gray-500 whitespace-nowrap font-normal">
-                        Last:&nbsp;
-                        {new Date(lastSession.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
-                      </span>
-                    )}
+              <div className={`fixed inset-x-0 bottom-0 z-50 bg-white/60 backdrop-blur-md rounded-t-2xl border-t p-4 shadow-2xl flex flex-col max-h-[90vh] min-h-[33vh] transition-transform duration-700 ease-out ${activeExerciseId ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'} w-full`} style={{transitionProperty: 'transform, opacity'}}>
+                <div className="flex flex-col gap-1 mb-2">
+                  <div className="flex items-center justify-between gap-2 w-full">
+                    <div className="flex-1 flex items-center min-w-0">
+                      <h3 className="font-semibold text-2xl pr-2 break-words truncate font-sans">{exercise.name}</h3>
+                      {lastSession && (
+                        <span className="ml-2 text-base text-gray-500 whitespace-nowrap font-normal">
+                          {new Date(lastSession.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Hide delete button on mobile */}
+                      <button
+                        className="hidden md:flex text-red-500 hover:text-red-700 p-2"
+                        onClick={() => exercise.id && handleDeleteExercise(exercise)}
+                        title="Delete exercise"
+                        style={{ minWidth: 36 }}
+                      >
+                        <Trash2 size={24} />
+                      </button>
+                      <button
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-blue-700 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                        onClick={() => setActiveExerciseId(null)}
+                        aria-label="Close"
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {/* Hide delete button on mobile */}
-                    <button
-                      className="hidden md:flex text-red-500 hover:text-red-700 p-2"
-                      onClick={() => exercise.id && handleDeleteExercise(exercise)}
-                      title="Delete exercise"
-                      style={{ minWidth: 36 }}
-                    >
-                      <Trash2 size={24} />
-                    </button>
-                    <button
-                      className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-blue-700 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-                      onClick={() => setActiveExerciseId(null)}
-                      aria-label="Close"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <button
+                    className="w-full mt-2 py-3 rounded-xl bg-white/70 hover:bg-blue-50 text-blue-700 font-semibold text-base shadow transition"
+                    onClick={() => setShowMobileSessionsSheet(true)}
+                  >
+                    Previous Sessions
+                  </button>
                 </div>
                 {/* Thumb-friendly controls */}
                 <div className="flex flex-col gap-3 mt-auto">
@@ -559,18 +572,29 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                     </button>
                   </div>
                   {/* Start/Stop Timer button (now below weight row) */}
-                  <button
-                    onClick={() => handleStartTimer(exercise.name)}
-                    className={`w-full flex items-center justify-center gap-2 py-7 rounded-2xl text-2xl font-semibold focus:ring-2 focus:outline-none mb-2 ${
-                      isTimerActive
-                        ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500'
-                        : 'bg-blue-700 hover:bg-blue-800 text-white focus:ring-blue-500'
-                    }`}
-                    style={{ minHeight: 80 }}
-                  >
-                    {isTimerActive ? <Square size={32} /> : <Play size={32} />}
-                    {isTimerActive ? `Stop (${timerState.time}s)` : 'Start Timer'}
-                  </button>
+                  <div className="flex justify-center items-center w-full mb-2">
+                    <div className="relative flex items-center justify-center">
+                      {/* Progress ring (visual only) */}
+                      <svg className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" width="96" height="96" viewBox="0 0 96 96">
+                        <circle cx="48" cy="48" r="44" fill="none" stroke="#2563eb" strokeWidth="6" opacity="0.15" />
+                        {/* Future: animated progress */}
+                      </svg>
+                      <button
+                        onClick={() => handleStartTimer(exercise.name)}
+                        className={`w-28 h-28 flex flex-col items-center justify-center gap-2 rounded-full text-2xl font-semibold focus:ring-2 focus:outline-none transition-all duration-200 active:scale-95 hover:scale-105 shadow-xl ${
+                          isTimerActive
+                            ? 'bg-gradient-to-br from-red-500 to-red-700 text-white focus:ring-red-500 shadow-red-400/40'
+                            : 'bg-gradient-to-br from-blue-500 to-blue-700 text-white focus:ring-blue-500 shadow-blue-400/40'
+                        }`}
+                        style={{ minHeight: 96, boxShadow: isTimerActive ? '0 0 32px 8px rgba(239,68,68,0.25)' : '0 0 32px 8px rgba(37,99,235,0.25)' }}
+                      >
+                        <span className="flex items-center justify-center">
+                          {isTimerActive ? <Square size={40} /> : <Play size={40} />}
+                        </span>
+                        <span className="font-bold text-lg font-sans mt-1 tracking-wide select-none">{isTimerActive ? `Stop (${timerState.time}s)` : 'Timer'}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 {/* End thumb-friendly controls */}
                 {/* Last session section moved above, so remove here */}
@@ -856,6 +880,93 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
           </div>
         </div>
       )}
+
+      {/* Mobile Previous Sessions Slide-up Sheet */}
+      {showMobileSessionsSheet && activeExerciseId && (() => {
+        const exercise = localExercises.find(e => e.id === activeExerciseId);
+        if (!exercise) return null;
+        const sessions = [...exercise.sessions].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        return (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            {/* Overlay */}
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowMobileSessionsSheet(false)} />
+            {/* Sheet */}
+            <div className="relative w-full max-w-md bg-white/80 backdrop-blur-md rounded-t-2xl shadow-2xl p-4 pb-8 animate-slideUp z-10">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold">Previous Sessions</h3>
+                <button className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-blue-700 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition" onClick={() => setShowMobileSessionsSheet(false)} aria-label="Close">×</button>
+              </div>
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                {sessions.slice(0, mobileSessionsToShow).map((session, idx) => (
+                  <div key={session.id || idx} className="flex items-center gap-2 bg-white/80 rounded-xl px-3 py-2 shadow-sm">
+                    <div className="flex-1">
+                      <div className="text-xs text-gray-400">{new Date(session.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+                      {editingSessionId === session.id ? (
+                        <div className="flex gap-2 mt-1">
+                          <input
+                            type="number"
+                            className="w-16 px-2 py-1 border rounded text-sm"
+                            value={editSessionValues.weight}
+                            onChange={e => setEditSessionValues(v => ({ ...v, weight: e.target.value }))}
+                          />
+                          <input
+                            type="number"
+                            className="w-16 px-2 py-1 border rounded text-sm"
+                            value={editSessionValues.timeUnderLoad}
+                            onChange={e => setEditSessionValues(v => ({ ...v, timeUnderLoad: e.target.value }))}
+                          />
+                          <button className="text-green-600 font-bold px-2" onClick={() => {
+                            // Save edit
+                            setLocalExercises(prev => prev.map(ex =>
+                              ex.id === exercise.id ? {
+                                ...ex,
+                                sessions: ex.sessions.map(s =>
+                                  s.id === session.id ? {
+                                    ...s,
+                                    weight: editSessionValues.weight === '' ? 0 : Number(editSessionValues.weight),
+                                    timeUnderLoad: editSessionValues.timeUnderLoad === '' ? 0 : Number(editSessionValues.timeUnderLoad)
+                                  } : s
+                                )
+                              } : ex
+                            ));
+                            setEditingSessionId(null);
+                          }}>✓</button>
+                          <button className="text-gray-400 px-2" onClick={() => setEditingSessionId(null)}>✕</button>
+                        </div>
+                      ) : (
+                        <div className="text-base font-medium">
+                          {session.weight}lbs × {session.timeUnderLoad}s
+                        </div>
+                      )}
+                    </div>
+                    <button className="text-blue-600 hover:text-blue-800 px-2" onClick={() => {
+                      setEditingSessionId(session.id || null);
+                      setEditSessionValues({ weight: String(session.weight), timeUnderLoad: String(session.timeUnderLoad) });
+                    }} aria-label="Edit session">✎</button>
+                    <button className="text-red-500 hover:text-red-700 px-2" onClick={() => {
+                      // Delete session
+                      setLocalExercises(prev => prev.map(ex =>
+                        ex.id === exercise.id ? {
+                          ...ex,
+                          sessions: ex.sessions.filter(s => s.id !== session.id)
+                        } : ex
+                      ));
+                    }} aria-label="Delete session">🗑️</button>
+                  </div>
+                ))}
+                {sessions.length > mobileSessionsToShow && (
+                  <button className="w-full mt-2 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold" onClick={() => setMobileSessionsToShow(n => n + 5)}>
+                    Load More
+                  </button>
+                )}
+                {sessions.length === 0 && (
+                  <div className="text-center text-gray-400 py-8">No previous sessions yet.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <ConfirmationModal
         isOpen={showDeleteModal}
