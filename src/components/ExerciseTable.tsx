@@ -818,7 +818,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         onClose={() => setShowDeleteModal(false)}
         onConfirm={confirmDelete}
         title="Delete Exercise"
-        message={`Are you sure you want to delete ${exerciseToDelete}?${deleteWarning ? ' This exercise has sessions and deleting it will remove all associated data.' : ' This action cannot be undone.'}`}
+        message={`Are you sure you want to delete ${localExercises.find(ex => ex.id === exerciseToDelete)?.name || ''}?${deleteWarning ? ' This exercise has sessions and deleting it will remove all associated data.' : ' This action cannot be undone.'}`}
       />
 
       <ConfirmationModal
