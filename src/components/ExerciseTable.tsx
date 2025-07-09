@@ -68,6 +68,19 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   const [showDeleteSessionModal, setShowDeleteSessionModal] = useState(false);
   const newExerciseInputRef = useRef<HTMLInputElement | null>(null);
   const [deleteWarning, setDeleteWarning] = useState(false);
+  // Mobile-focused exercise state
+  const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
+  // Animation helpers
+  const [showOverlay, setShowOverlay] = useState(false);
+  useEffect(() => {
+    if (activeExerciseId) {
+      setShowOverlay(true);
+    } else {
+      // Delay removal for fade-out
+      const timeout = setTimeout(() => setShowOverlay(false), 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [activeExerciseId]);
 
   // Initialize audio element with correct path
   useEffect(() => {
@@ -411,39 +424,90 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   return (
     <div>
       <div className="mb-8">
-        {/* Mobile view - cards for each exercise */}
-        <div className="md:hidden space-y-4">
-          {localExercises.map((exercise) => {
+        {/* Mobile view - focused exercise card with overlay and animation */}
+        <div className="md:hidden">
+          {/* Soft blur overlay */}
+          {showOverlay && (
+            <div
+              className={`fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity duration-700 ${activeExerciseId ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              onClick={() => setActiveExerciseId(null)}
+              aria-label="Close exercise focus"
+            />
+          )}
+          {showOverlay && activeExerciseId && (() => {
+            const exercise = localExercises.find(e => e.id === activeExerciseId);
+            if (!exercise) return null;
             const lastSession = exercise.sessions[exercise.sessions.length - 1];
             const isTimerActive = timerState.exerciseName === exercise.name;
-
             return (
-              <div key={exercise.name} className="bg-white rounded-lg border p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-lg">{exercise.name}</h3>
-                  <button
-                    onClick={() => exercise.id && handleDeleteExercise(exercise)}
-                    className="text-red-500 hover:text-red-700 p-2"
-                    title="Delete exercise"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+              <div className={`fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl border-t p-4 shadow-2xl flex flex-col max-h-[90vh] min-h-[33vh] transition-transform duration-700 ease-out ${activeExerciseId ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'} w-full`} style={{transitionProperty: 'transform, opacity'}}>
+                <div className="flex items-center justify-between mb-1 gap-2 w-full">
+                  <div className="flex-1 flex items-center min-w-0">
+                    <h3 className="font-semibold text-2xl pr-2 break-words truncate">{exercise.name}</h3>
+                    {lastSession && (
+                      <span className="ml-2 text-base text-gray-500 whitespace-nowrap font-normal">Last: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Hide delete button on mobile */}
+                    <button
+                      className="hidden md:flex text-red-500 hover:text-red-700 p-2"
+                      onClick={() => exercise.id && handleDeleteExercise(exercise)}
+                      title="Delete exercise"
+                      style={{ minWidth: 36 }}
+                    >
+                      <Trash2 size={24} />
+                    </button>
+                    <button
+                      className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-blue-700 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                      onClick={() => setActiveExerciseId(null)}
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
-
-                {/* Weight section */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Weight ({weightUnit})
-                    </label>
-                    <button 
+                {/* Thumb-friendly controls */}
+                <div className="flex flex-col gap-3 mt-auto">
+                  {/* Timer controls */}
+                  <div className="flex items-center justify-between mb-1 gap-2 w-full">
+                    <button
+                      onClick={() => {
+                        const newState = !timerSettings.soundEnabled;
+                        trackEvent('toggle_sound', { enabled: newState });
+                        updateTimerSettings({ soundEnabled: newState });
+                        if (!timerSettings.soundEnabled) {
+                          setTimeout(testSound, 100);
+                        }
+                      }}
+                      className="p-2 hover:bg-gray-200 rounded-full"
+                      title={timerSettings.soundEnabled ? "Sound enabled" : "Sound disabled"}
+                    >
+                      {timerSettings.soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
+                    </button>
+                    <select
+                      value={timerSettings.countdownTime}
+                      onChange={(e) => updateTimerSettings({ countdownTime: Number(e.target.value) })}
+                      className="text-sm border rounded p-1"
+                      title="Countdown time"
+                    >
+                      {[5, 10, 15, 20, 30].map(time => (
+                        <option key={time} value={time}>{time}s</option>
+                      ))}
+                    </select>
+                    <div className="flex-1 flex flex-col items-center justify-center">
+                      <span className="text-base text-gray-700 font-medium block text-center w-full">Weight ({weightUnit})</span>
+                    </div>
+                    <button
                       onClick={handleWeightUnitToggle}
-                      className="text-xs text-blue-600 hover:text-blue-800"
+                      className="text-base font-medium text-blue-600 hover:text-blue-800 px-2"
+                      style={{ minWidth: 'max-content' }}
                     >
                       Toggle Units
                     </button>
                   </div>
-                  <div className="flex items-center">
+                  {/* Weight controls row */}
+                  <div className="flex w-full gap-4 justify-center items-end">
                     <button
                       onClick={() => {
                         const currentWeight = weights[exercise.name] || 0;
@@ -456,8 +520,9 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                           action: 'decrement'
                         });
                       }}
-                      className="px-4 py-3 bg-gray-100 hover:bg-gray-200 border border-r-0 rounded-l-lg transition-colors text-lg font-bold"
+                      className="flex-1 h-24 bg-gray-100 hover:bg-gray-200 rounded-2xl text-4xl font-bold flex items-center justify-center transition-colors"
                       title="Decrease weight by 5"
+                      style={{ minWidth: 0, aspectRatio: '1/1' }}
                     >
                       −
                     </button>
@@ -465,9 +530,11 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                       type="number"
                       value={Object.prototype.hasOwnProperty.call(weights, exercise.name) ? convertWeight(weights[exercise.name]) : ''}
                       onChange={(e) => handleWeightChange(exercise.name, e)}
-                      className="flex-1 p-3 border-y text-center text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 h-24 text-center text-3xl font-semibold border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 mx-2"
                       min="0"
                       step="1"
+                      style={{ minWidth: 0, maxWidth: 120 }}
+                      aria-label="Weight"
                     />
                     <button
                       onClick={() => {
@@ -481,88 +548,56 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                           action: 'increment'
                         });
                       }}
-                      className="px-4 py-3 bg-gray-100 hover:bg-gray-200 border border-l-0 rounded-r-lg transition-colors text-lg font-bold"
+                      className="flex-1 h-24 bg-gray-100 hover:bg-gray-200 rounded-2xl text-4xl font-bold flex items-center justify-center transition-colors"
                       title="Increase weight by 5"
+                      style={{ minWidth: 0, aspectRatio: '1/1' }}
                     >
                       +
                     </button>
                   </div>
-                </div>
-
-                {/* Timer section */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700">Timer</label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          const newState = !timerSettings.soundEnabled;
-                          trackEvent('toggle_sound', { enabled: newState });
-                          updateTimerSettings({ soundEnabled: newState });
-                          if (!timerSettings.soundEnabled) {
-                            setTimeout(testSound, 100);
-                          }
-                        }}
-                        className="p-2 hover:bg-gray-200 rounded"
-                        title={timerSettings.soundEnabled ? "Sound enabled" : "Sound disabled"}
-                      >
-                        {timerSettings.soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-                      </button>
-                      <select
-                        value={timerSettings.countdownTime}
-                        onChange={(e) => updateTimerSettings({ countdownTime: Number(e.target.value) })}
-                        className="text-sm border rounded p-1"
-                        title="Countdown time"
-                      >
-                        {[5, 10, 15, 20, 30].map(time => (
-                          <option key={time} value={time}>{time}s</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  {/* Start/Stop Timer button (now below weight row) */}
                   <button
                     onClick={() => handleStartTimer(exercise.name)}
-                    className={`w-full flex items-center justify-center gap-2 py-4 rounded-lg text-lg font-semibold focus:ring-2 focus:outline-none ${
+                    className={`w-full flex items-center justify-center gap-2 py-7 rounded-2xl text-2xl font-semibold focus:ring-2 focus:outline-none mb-2 ${
                       isTimerActive
                         ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500'
                         : 'bg-blue-700 hover:bg-blue-800 text-white focus:ring-blue-500'
                     }`}
+                    style={{ minHeight: 80 }}
                   >
-                    {isTimerActive ? <Square size={24} /> : <Play size={24} />}
+                    {isTimerActive ? <Square size={32} /> : <Play size={32} />}
                     {isTimerActive ? `Stop (${timerState.time}s)` : 'Start Timer'}
                   </button>
-                  {isTimerActive && lastSession && (
-                    <div className="mt-2 text-center text-xs text-gray-500">
-                      Last session: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
-                    </div>
-                  )}
                 </div>
-
-                {/* Last session section */}
-                <div className="border-t pt-3">
-                  {lastSession ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">
-                        Last: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
-                      </span>
-                      <button
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                        onClick={() => {
-                          setSelectedExercise(exercise);
-                          setSessionsToShow(5);
-                          setShowSessionsModal(true);
-                        }}
-                      >
-                        View History
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-gray-500">No sessions yet</span>
-                  )}
-                </div>
+                {/* End thumb-friendly controls */}
+                {/* Last session section moved above, so remove here */}
               </div>
             );
-          })}
+          })()}
+          {!activeExerciseId && (
+            <div className="space-y-4">
+              {localExercises.map((exercise) => {
+                const lastSession = exercise.sessions[exercise.sessions.length - 1];
+                return (
+                  <button
+                    key={exercise.id}
+                    className="w-full bg-white rounded-xl border p-4 shadow flex flex-col items-start hover:bg-blue-50 focus:bg-blue-100 transition-colors"
+                    onClick={() => setActiveExerciseId(exercise.id || null)}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span className="text-lg font-semibold">{exercise.name}</span>
+                      <span className="text-xs text-gray-400">Tap to focus</span>
+                    </div>
+                    {lastSession && (
+                      <div className="mt-1 text-sm text-gray-500">
+                        Last: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Desktop view - table */}
@@ -725,26 +760,29 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         </div>
       </div>
 
-      <div className="mb-8 border-t pt-8">
-        <h2 className="text-lg font-semibold mb-4">Add New Exercise</h2>
-        <form onSubmit={handleAddExercise} className="flex gap-2">
-          <input
-            type="text"
-            ref={newExerciseInputRef}
-            value={newExerciseName}
-            onChange={(e) => setNewExerciseName(e.target.value)}
-            placeholder="New exercise name"
-            className="flex-grow p-2 border rounded-lg"
-          />
-          <button
-            type="submit"
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
-          >
-            <Plus size={20} />
-            Add Exercise
-          </button>
-        </form>
-      </div>
+      {/* Hide add new exercise and chart when focused on mobile */}
+      {!(activeExerciseId && window.innerWidth < 768) && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">Add New Exercise</h2>
+          <form onSubmit={handleAddExercise} className="flex gap-2">
+            <input
+              type="text"
+              ref={newExerciseInputRef}
+              value={newExerciseName}
+              onChange={(e) => setNewExerciseName(e.target.value)}
+              placeholder="New exercise name"
+              className="flex-grow p-2 border rounded-lg"
+            />
+            <button
+              type="submit"
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+            >
+              <Plus size={20} />
+              Add Exercise
+            </button>
+          </form>
+        </div>
+      )}
 
       {allSessions.length > 0 && (
         <div className="mb-8">
