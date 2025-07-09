@@ -768,7 +768,10 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
             </button>
             <h2 className="text-xl font-bold mb-4">Previous Sessions for {selectedExercise.name}</h2>
             <SessionTable
-              sessions={selectedExercise.sessions.slice(-sessionsToShow).reverse()}
+              sessions={[...selectedExercise.sessions]
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                .slice(0, sessionsToShow)
+              }
               onUpdateSession={(index, updates) => {
                 const session = selectedExercise.sessions.slice(-sessionsToShow).reverse()[index];
                 if (session.id) {
