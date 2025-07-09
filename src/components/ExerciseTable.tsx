@@ -66,6 +66,8 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   const [isEditing, setIsEditing] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [showDeleteSessionModal, setShowDeleteSessionModal] = useState(false);
+  const newExerciseInputRef = useRef<HTMLInputElement | null>(null);
+  const [deleteWarning, setDeleteWarning] = useState(false);
 
   // Initialize audio element with correct path
   useEffect(() => {
@@ -85,6 +87,12 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     });
     setWeights(newWeights);
   }, [exercises]);
+
+  useEffect(() => {
+    if (newExerciseInputRef.current) {
+      newExerciseInputRef.current.focus();
+    }
+  }, []);
 
   useEffect(() => {
     let interval: number | undefined;
@@ -227,6 +235,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     trackEvent('delete_exercise', { name: exercise.name });
     setExerciseToDelete(exercise.id);
     setShowDeleteModal(true);
+    setDeleteWarning(exercise.sessions && exercise.sessions.length > 0);
   };
 
   const confirmDelete = async () => {
@@ -523,11 +532,8 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                     {isTimerActive ? `Stop (${timerState.time}s)` : 'Start Timer'}
                   </button>
                   {isTimerActive && lastSession && (
-                    <div className="mt-2 text-center text-sm text-gray-700">
-                      {lastSession.timeUnderLoad - timerState.time > 0 && 
-                       lastSession.timeUnderLoad - timerState.time <= timerSettings.countdownTime && 
-                        `${lastSession.timeUnderLoad - timerState.time}s to go`
-                      }
+                    <div className="mt-2 text-center text-xs text-gray-500">
+                      Last session: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
                     </div>
                   )}
                 </div>
@@ -677,11 +683,8 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
                           {isTimerActive ? `Stop (${timerState.time}s)` : 'Start'}
                         </button>
                         {isTimerActive && lastSession && (
-                          <span className="text-sm text-gray-700">
-                            {lastSession.timeUnderLoad - timerState.time > 0 && 
-                             lastSession.timeUnderLoad - timerState.time <= timerSettings.countdownTime && 
-                              `${lastSession.timeUnderLoad - timerState.time}s to go`
-                            }
+                          <span className="block text-xs text-gray-500 ml-2">
+                            Last: {formatWeight(lastSession.weight)} × {lastSession.timeUnderLoad}s
                           </span>
                         )}
                       </div>
@@ -727,6 +730,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         <form onSubmit={handleAddExercise} className="flex gap-2">
           <input
             type="text"
+            ref={newExerciseInputRef}
             value={newExerciseName}
             onChange={(e) => setNewExerciseName(e.target.value)}
             placeholder="New exercise name"
@@ -755,7 +759,9 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         >
           <div className="bg-white rounded-2xl p-6 max-w-lg w-full relative">
             <button
-              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+              className="absolute top-2 right-2 text-gray-700 hover:text-red-600 text-3xl font-bold p-2 rounded-full bg-white/80 shadow-md z-10"
+              style={{ lineHeight: '1', width: '2.5rem', height: '2.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              aria-label="Close"
               onClick={handleModalClose}
             >
               ×
@@ -812,7 +818,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         onClose={() => setShowDeleteModal(false)}
         onConfirm={confirmDelete}
         title="Delete Exercise"
-        message={`Are you sure you want to delete ${exerciseToDelete}? This action cannot be undone.`}
+        message={`Are you sure you want to delete ${exerciseToDelete}?${deleteWarning ? ' This exercise has sessions and deleting it will remove all associated data.' : ' This action cannot be undone.'}`}
       />
 
       <ConfirmationModal
