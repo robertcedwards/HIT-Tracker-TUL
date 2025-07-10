@@ -812,7 +812,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
       )}
 
       {allSessions.length > 0 && (
-        <div className="mb-8">
+        <div className="mb-8 hidden md:block">
           <AllSessionsGraph sessions={allSessions} />
         </div>
       )}
