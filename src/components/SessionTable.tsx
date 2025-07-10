@@ -11,24 +11,26 @@ interface SessionTableProps {
 }
 
 export function SessionTable({ sessions, onUpdateSession, onDeleteSession, editable = true, deletable = true, editedSessions = {} }: SessionTableProps) {
+  const showExerciseCol = sessions.some(s => s.exerciseName);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[11px] md:text-sm">
         <thead>
           <tr className="bg-gray-50">
+            {showExerciseCol && <th className="px-0 py-1 md:px-2 md:py-2 text-left whitespace-nowrap">Exercise</th>}
             <th className="px-0 py-1 md:px-2 md:py-2 text-left whitespace-nowrap">Date</th>
             <th className="px-0 py-1 md:px-2 md:py-2 text-left whitespace-nowrap min-w-[50px] w-[50px] md:w-auto">Weight</th>
             <th className="px-0 py-1 md:px-2 md:py-2 text-left whitespace-nowrap min-w-[40px] w-[40px] md:w-auto">Time</th>
-            <th className="px-0.5 py-1 md:px-2 md:py-2 text-left whitespace-nowrap min-w-[30px] w-[30px] md:w-auto">Actions</th>
+            {deletable && <th className="px-0.5 py-1 md:px-2 md:py-2 text-left whitespace-nowrap min-w-[30px] w-[30px] md:w-auto">Actions</th>}
           </tr>
         </thead>
         <tbody>
           {sessions.map((session, index) => {
             const editedSession = editedSessions[session.id!];
             const displaySession = editedSession || session;
-            
             return (
               <tr key={session.id || session.timestamp + '-' + index} className="border-t">
+                {showExerciseCol && <td className="px-0 py-1 md:px-2 md:py-2 font-semibold">{session.exerciseName || ''}</td>}
                 <td className="px-0 py-1 md:px-2 md:py-2" style={{ minWidth: '130px', maxWidth: '150px', width: '1%' }}>
                   {editable ? (
                     <input
@@ -78,8 +80,8 @@ export function SessionTable({ sessions, onUpdateSession, onDeleteSession, edita
                     displaySession.timeUnderLoad
                   )}
                 </td>
-                <td className="px-0.5 py-1 md:px-2 md:py-2">
-                  {deletable ? (
+                {deletable && (
+                  <td className="px-0.5 py-1 md:px-2 md:py-2">
                     <button
                       onClick={() => onDeleteSession(index)}
                       className="text-red-500 hover:text-red-700"
@@ -87,14 +89,14 @@ export function SessionTable({ sessions, onUpdateSession, onDeleteSession, edita
                     >
                       <Trash2 size={16} />
                     </button>
-                  ) : null}
-                </td>
+                  </td>
+                )}
               </tr>
             );
           })}
           {sessions.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-4 py-2 text-center text-gray-500">
+              <td colSpan={showExerciseCol ? 5 : 4} className="px-4 py-2 text-center text-gray-500">
                 No sessions recorded yet
               </td>
             </tr>

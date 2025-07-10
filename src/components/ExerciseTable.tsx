@@ -817,6 +817,26 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         </div>
       )}
 
+      {/* Mobile: Recent Sessions Table where chart was */}
+      {allSessions.length > 0 && (
+        <div className="mb-8 md:hidden">
+          <h2 className="text-lg font-semibold mb-2">Recent Sessions</h2>
+          <SessionTable
+            sessions={(() => {
+              if (activeExerciseId) {
+                const exercise = localExercises.find(e => e.id === activeExerciseId);
+                return exercise ? [...exercise.sessions].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5) : [];
+              }
+              return allSessions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5);
+            })()}
+            onUpdateSession={() => {}}
+            onDeleteSession={() => {}}
+            editable={false}
+            deletable={false}
+          />
+        </div>
+      )}
+
       {showSessionsModal && selectedExercise && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
