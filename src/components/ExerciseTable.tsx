@@ -791,7 +791,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
       {!(activeExerciseId && window.innerWidth < 768) && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Add New Exercise</h2>
-          <form onSubmit={handleAddExercise} className="flex gap-2">
+          <form onSubmit={handleAddExercise} className="flex flex-col gap-2 sm:flex-row sm:gap-2">
             <input
               type="text"
               ref={newExerciseInputRef}
@@ -802,7 +802,7 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
             />
             <button
               type="submit"
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 w-full sm:w-auto justify-center"
             >
               <Plus size={20} />
               Add Exercise
