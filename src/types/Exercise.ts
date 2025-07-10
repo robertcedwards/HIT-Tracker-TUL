@@ -4,6 +4,7 @@ export type Session = {
   timeUnderLoad: number;
   timestamp: string;
   exercise_id?: string;
+  exerciseName?: string; // For display in recent sessions table
 };
 
 export type Exercise = {
