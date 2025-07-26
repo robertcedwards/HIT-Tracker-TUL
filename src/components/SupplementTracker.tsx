@@ -93,6 +93,9 @@ export function SupplementTracker() {
         fetch(`/.netlify/functions/dsld-proxy?type=search&q=${encodeURIComponent(search)}`)
       );
       
+      // Debug: Log the raw API response
+      console.log('🔍 Raw DSLD API response:', data);
+      
       let products: any[] = [];
       if (Array.isArray(data.products)) {
         products = data.products;
@@ -107,6 +110,8 @@ export function SupplementTracker() {
       } else if (data && data.labels && Array.isArray(data.labels)) {
         products = data.labels;
       }
+      
+      console.log('🔍 Extracted products array:', products);
       
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
@@ -143,6 +148,15 @@ export function SupplementTracker() {
         
         // Debug logging for dosage extraction
         const productName = source.fullName || source.productName || source.product_name || source.name;
+        console.log(`🔍 Dosage extraction for ${productName}:`, {
+          defaultDosageMg: defaultDosageMg,
+          hasServingSizes: !!source.servingSizes,
+          servingSizes: source.servingSizes,
+          hasIngredientRows: !!source.ingredientRows,
+          ingredientRows: source.ingredientRows,
+          allSourceKeys: Object.keys(source)
+        });
+        
         if (defaultDosageMg) {
           console.log(`✅ Search: Extracted dosage for ${productName}: ${defaultDosageMg}mg`);
         } else {
@@ -184,6 +198,9 @@ export function SupplementTracker() {
         fetch(`/.netlify/functions/dsld-proxy?type=search&q=${q}`)
       );
       
+      // Debug: Log the raw API response for barcode
+      console.log('🔍 Raw DSLD Barcode API response:', data);
+      
       let products: any[] = [];
       if (Array.isArray(data.products)) {
         products = data.products;
@@ -198,6 +215,8 @@ export function SupplementTracker() {
       } else if (data && data.labels && Array.isArray(data.labels)) {
         products = data.labels;
       }
+      
+      console.log('🔍 Extracted barcode products array:', products);
       
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
@@ -233,6 +252,15 @@ export function SupplementTracker() {
         
         // Debug logging for dosage extraction
         const productName = source.fullName || source.productName || source.product_name || source.name;
+        console.log(`🔍 Barcode dosage extraction for ${productName}:`, {
+          defaultDosageMg: defaultDosageMg,
+          hasServingSizes: !!source.servingSizes,
+          servingSizes: source.servingSizes,
+          hasIngredientRows: !!source.ingredientRows,
+          ingredientRows: source.ingredientRows,
+          allSourceKeys: Object.keys(source)
+        });
+        
         if (defaultDosageMg) {
           console.log(`✅ Barcode: Extracted dosage for ${productName}: ${defaultDosageMg}mg`);
         } else {
