@@ -163,8 +163,17 @@ export function SupplementTracker() {
 
   // Helper function to group usage log entries for hierarchical display
   const groupUsageLogEntries = (usageLog: SupplementUsage[]): Array<{main: SupplementUsage, ingredients: SupplementUsage[]}> => {
+    console.log('🔗 Grouping usage log entries, total entries:', usageLog.length);
+    
     const grouped: Array<{main: SupplementUsage, ingredients: SupplementUsage[]}> = [];
     const processed = new Set<string>();
+    
+    // Debug: log all supplement names and types
+    usageLog.forEach(u => {
+      const supplement = u.user_supplement?.supplement;
+      const isIngredient = supplement && isAutoCreatedIngredient(supplement);
+      console.log(`📋 Usage entry: ${supplement?.name} (isIngredient: ${isIngredient}, timestamp: ${u.timestamp})`);
+    });
     
     // First pass: find main supplement entries
     for (const usage of usageLog) {
@@ -181,6 +190,8 @@ export function SupplementTracker() {
         const mainTime = new Date(mainEntry.timestamp).getTime();
         const timeWindow = 5000; // 5 seconds
         
+        console.log(`🔍 Looking for ingredients for main supplement: ${supplement?.name} at ${mainTime}`);
+        
         for (const potentialIngredient of usageLog) {
           if (processed.has(potentialIngredient.id)) continue;
           if (potentialIngredient.id === mainEntry.id) continue;
@@ -191,12 +202,14 @@ export function SupplementTracker() {
           if (timeDiff <= timeWindow) {
             const ingredientSupplement = potentialIngredient.user_supplement?.supplement;
             if (ingredientSupplement && isAutoCreatedIngredient(ingredientSupplement)) {
+              console.log(`✅ Found ingredient: ${ingredientSupplement.name} (time diff: ${timeDiff}ms)`);
               ingredientEntries.push(potentialIngredient);
               processed.add(potentialIngredient.id);
             }
           }
         }
         
+        console.log(`📦 Grouped: ${supplement?.name} with ${ingredientEntries.length} ingredients`);
         grouped.push({ main: mainEntry, ingredients: ingredientEntries });
         processed.add(mainEntry.id);
       }
@@ -210,6 +223,7 @@ export function SupplementTracker() {
       }
     }
     
+    console.log(`🎯 Final grouped entries: ${grouped.length}`);
     return grouped;
   };
 
@@ -1343,13 +1357,28 @@ export function SupplementTracker() {
   };
 
   // Chart data: group by date, supplement
+  // Filter usage log to only show individual ingredients for multi-ingredient supplements
+  // and main supplements for single-ingredient ones
+  const chartUsageLog = usageLog.filter(u => {
+    const supplement = u.user_supplement?.supplement;
+    if (!supplement) return false;
+    
+    // If it's an auto-created ingredient, always show it
+    if (isAutoCreatedIngredient(supplement)) return true;
+    
+    // If it's a main supplement, only show if it's NOT multi-ingredient
+    const isMultiIngredient = supplement._ingredientInfo?.isMultiIngredient ||
+                             isLikelyMultiIngredient(supplement);
+    return !isMultiIngredient;
+  });
+  
   // Build chart data: one object per date, each supplement as a key
-  const supplementNames = Array.from(new Set(usageLog.map(u => u.user_supplement?.supplement?.name).filter((n): n is string => typeof n === 'string' && !!n)));
+  const supplementNames = Array.from(new Set(chartUsageLog.map(u => u.user_supplement?.supplement?.name).filter((n): n is string => typeof n === 'string' && !!n)));
   // Get all unique dates (sorted)
   const allDates = Array.from(new Set(usageLog.map(u => new Date(u.timestamp).toLocaleDateString()))).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
   // Build a map: {date: {supplementName: dosage}}
   const dateMap: Record<string, Record<string, number>> = {};
-  usageLog.forEach(u => {
+  chartUsageLog.forEach(u => {
     const date = new Date(u.timestamp).toLocaleDateString();
     const name = u.user_supplement?.supplement?.name || '';
     if (!dateMap[date]) dateMap[date] = {};
@@ -1900,7 +1929,7 @@ export function SupplementTracker() {
 
         {/* Consistency mini-chart */}
         <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-          <SupplementConsistencyHeatmap usageLog={usageLog} supplementNames={supplementNames} chartColors={chartColors} />
+                          <SupplementConsistencyHeatmap usageLog={chartUsageLog} supplementNames={supplementNames} chartColors={chartColors} />
         </div>
 
         {/* Usage log table and chart */}
