@@ -119,26 +119,34 @@ export function SupplementTracker() {
         // Try to extract serving size/dosage from various possible fields
         let defaultDosageMg = source.defaultDosageMg || source.default_dosage_mg;
         
-        // Try to parse serving size if no explicit dosage
-        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
-          const servingSize = source.servingSizes[0];
-          if (servingSize.minQuantity) {
-            // Extract numeric value from serving size
-            const dosageMatch = String(servingSize.minQuantity).match(/(\d+)/);
-            if (dosageMatch) {
-              defaultDosageMg = parseInt(dosageMatch[1]);
+        // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
+        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          for (const ingredient of source.ingredientRows) {
+            if (ingredient.quantity && ingredient.quantity.length > 0) {
+              for (const quantity of ingredient.quantity) {
+                // Look for dosage with "mg" specifically
+                const dosageMatch = String(quantity.quantity).match(/(\d+)\s*mg/i);
+                if (dosageMatch) {
+                  defaultDosageMg = parseInt(dosageMatch[1]);
+                  break;
+                }
+              }
+              if (defaultDosageMg) break;
             }
           }
         }
         
-        // Try to parse from ingredient rows
-        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
-          const mainIngredient = source.ingredientRows[0];
-          if (mainIngredient.quantity && mainIngredient.quantity.length > 0) {
-            const quantity = mainIngredient.quantity[0];
-            const dosageMatch = String(quantity.quantity).match(/(\d+)/);
-            if (dosageMatch) {
-              defaultDosageMg = parseInt(dosageMatch[1]);
+        // PRIORITY 2: Try to parse serving size if no explicit dosage (but avoid capsule counts)
+        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
+          const servingSize = source.servingSizes[0];
+          if (servingSize.minQuantity) {
+            // Look for dosage with "mg" specifically, avoid "capsule" 
+            const quantityStr = String(servingSize.minQuantity).toLowerCase();
+            if (quantityStr.includes('mg') && !quantityStr.includes('capsule')) {
+              const dosageMatch = quantityStr.match(/(\d+)\s*mg/i);
+              if (dosageMatch) {
+                defaultDosageMg = parseInt(dosageMatch[1]);
+              }
             }
           }
         }
@@ -224,26 +232,34 @@ export function SupplementTracker() {
         // Try to extract serving size/dosage from various possible fields
         let defaultDosageMg = source.defaultDosageMg || source.default_dosage_mg;
         
-        // Try to parse serving size if no explicit dosage
-        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
-          const servingSize = source.servingSizes[0];
-          if (servingSize.minQuantity) {
-            // Extract numeric value from serving size
-            const dosageMatch = String(servingSize.minQuantity).match(/(\d+)/);
-            if (dosageMatch) {
-              defaultDosageMg = parseInt(dosageMatch[1]);
+        // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
+        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          for (const ingredient of source.ingredientRows) {
+            if (ingredient.quantity && ingredient.quantity.length > 0) {
+              for (const quantity of ingredient.quantity) {
+                // Look for dosage with "mg" specifically
+                const dosageMatch = String(quantity.quantity).match(/(\d+)\s*mg/i);
+                if (dosageMatch) {
+                  defaultDosageMg = parseInt(dosageMatch[1]);
+                  break;
+                }
+              }
+              if (defaultDosageMg) break;
             }
           }
         }
         
-        // Try to parse from ingredient rows
-        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
-          const mainIngredient = source.ingredientRows[0];
-          if (mainIngredient.quantity && mainIngredient.quantity.length > 0) {
-            const quantity = mainIngredient.quantity[0];
-            const dosageMatch = String(quantity.quantity).match(/(\d+)/);
-            if (dosageMatch) {
-              defaultDosageMg = parseInt(dosageMatch[1]);
+        // PRIORITY 2: Try to parse serving size if no explicit dosage (but avoid capsule counts)
+        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
+          const servingSize = source.servingSizes[0];
+          if (servingSize.minQuantity) {
+            // Look for dosage with "mg" specifically, avoid "capsule" 
+            const quantityStr = String(servingSize.minQuantity).toLowerCase();
+            if (quantityStr.includes('mg') && !quantityStr.includes('capsule')) {
+              const dosageMatch = quantityStr.match(/(\d+)\s*mg/i);
+              if (dosageMatch) {
+                defaultDosageMg = parseInt(dosageMatch[1]);
+              }
             }
           }
         }
