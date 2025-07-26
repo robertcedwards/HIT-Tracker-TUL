@@ -110,13 +110,50 @@ export function SupplementTracker() {
       
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
+        
+        // Try to extract serving size/dosage from various possible fields
+        let defaultDosageMg = source.defaultDosageMg || source.default_dosage_mg;
+        
+        // Try to parse serving size if no explicit dosage
+        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
+          const servingSize = source.servingSizes[0];
+          if (servingSize.minQuantity) {
+            // Extract numeric value from serving size
+            const dosageMatch = String(servingSize.minQuantity).match(/(\d+)/);
+            if (dosageMatch) {
+              defaultDosageMg = parseInt(dosageMatch[1]);
+            }
+          }
+        }
+        
+        // Try to parse from ingredient rows
+        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          const mainIngredient = source.ingredientRows[0];
+          if (mainIngredient.quantity && mainIngredient.quantity.length > 0) {
+            const quantity = mainIngredient.quantity[0];
+            const dosageMatch = String(quantity.quantity).match(/(\d+)/);
+            if (dosageMatch) {
+              defaultDosageMg = parseInt(dosageMatch[1]);
+            }
+          }
+        }
+        
         // Try to extract image URL from possible fields
         const imageUrl = source.imageUrl || source.image_url || source.productImage || source.product_image || source.image || undefined;
+        
+        // Debug logging for dosage extraction
+        const productName = source.fullName || source.productName || source.product_name || source.name;
+        if (defaultDosageMg) {
+          console.log(`✅ Search: Extracted dosage for ${productName}: ${defaultDosageMg}mg`);
+        } else {
+          console.log(`❌ Search: No dosage found for ${productName}`);
+        }
+        
         return {
           dsldId: p._id || source.dsldId || source.dsld_id || source.id,
           productName: source.fullName || source.productName || source.product_name || source.name,
           brandName: source.brandName || source.brand_name || '',
-          defaultDosageMg: source.defaultDosageMg || undefined,
+          defaultDosageMg: defaultDosageMg || undefined,
           imageUrl
         };
       }));
@@ -164,12 +201,49 @@ export function SupplementTracker() {
       
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
+        
+        // Try to extract serving size/dosage from various possible fields
+        let defaultDosageMg = source.defaultDosageMg || source.default_dosage_mg;
+        
+        // Try to parse serving size if no explicit dosage
+        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
+          const servingSize = source.servingSizes[0];
+          if (servingSize.minQuantity) {
+            // Extract numeric value from serving size
+            const dosageMatch = String(servingSize.minQuantity).match(/(\d+)/);
+            if (dosageMatch) {
+              defaultDosageMg = parseInt(dosageMatch[1]);
+            }
+          }
+        }
+        
+        // Try to parse from ingredient rows
+        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          const mainIngredient = source.ingredientRows[0];
+          if (mainIngredient.quantity && mainIngredient.quantity.length > 0) {
+            const quantity = mainIngredient.quantity[0];
+            const dosageMatch = String(quantity.quantity).match(/(\d+)/);
+            if (dosageMatch) {
+              defaultDosageMg = parseInt(dosageMatch[1]);
+            }
+          }
+        }
+        
         const imageUrl = source.imageUrl || source.image_url || source.productImage || source.product_image || source.image || undefined;
+        
+        // Debug logging for dosage extraction
+        const productName = source.fullName || source.productName || source.product_name || source.name;
+        if (defaultDosageMg) {
+          console.log(`✅ Barcode: Extracted dosage for ${productName}: ${defaultDosageMg}mg`);
+        } else {
+          console.log(`❌ Barcode: No dosage found for ${productName}`);
+        }
+        
         return {
           dsldId: p._id || source.dsldId || source.dsld_id || source.id,
           productName: source.fullName || source.productName || source.product_name || source.name,
           brandName: source.brandName || source.brand_name || '',
-          defaultDosageMg: source.defaultDosageMg || undefined,
+          defaultDosageMg: defaultDosageMg || undefined,
           imageUrl
         };
       }));
@@ -231,6 +305,14 @@ export function SupplementTracker() {
     
     setLoading(true);
     try {
+      // Debug logging for dosage auto-fill
+      console.log('Adding DSLD supplement:', {
+        name: dsld.productName,
+        apiDosage: dsld.defaultDosageMg,
+        customDosage: customDosage,
+        finalDosage: customDosage ? customDosage : (dsld.defaultDosageMg ? String(dsld.defaultDosageMg) : undefined)
+      });
+      
       // Add to shared DB
       const supplement = await addSupplement({
         dsld_id: dsld.dsldId,
