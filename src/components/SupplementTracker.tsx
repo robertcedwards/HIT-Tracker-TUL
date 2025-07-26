@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { searchSupplements, addSupplement, getUserSupplements, addUserSupplement, logSupplementUsage, getSupplementUsages, updateUserSupplementDosage, updateSupplementUsage } from '../lib/supplements';
 import { Supplement, UserSupplement, SupplementUsage, DsldProduct } from '../types/Supplement';
 import { supabase } from '../lib/supabase';
@@ -16,12 +16,10 @@ export function SupplementTracker() {
   const [loading, setLoading] = useState(false);
   const [userSupplements, setUserSupplements] = useState<UserSupplement[]>([]);
   const [customDosage, setCustomDosage] = useState('');
-  const [selectedSupplement, setSelectedSupplement] = useState<Supplement | null>(null);
   const [usageLog, setUsageLog] = useState<SupplementUsage[]>([]);
   const [logLoading, setLogLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const searchTimeout = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [customAddMode, setCustomAddMode] = useState(false);
   const [customName, setCustomName] = useState('');
@@ -354,7 +352,7 @@ export function SupplementTracker() {
       setDosageLoading(prev => ({ ...prev, [userSupplement.id]: false }));
     }
   };
-  const handleDosageKeyDown = (e: React.KeyboardEvent, userSupplement: UserSupplement) => {
+  const handleDosageKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       (e.target as HTMLInputElement).blur();
     }
@@ -473,7 +471,7 @@ export function SupplementTracker() {
       handleBarcodeSearch(undefined, code);
     };
 
-    const onProcessed = (result: any) => {
+    const onProcessed = () => {
       // Optional: Handle processed frames (for debugging)
       if (cancelled) return;
     };
@@ -936,7 +934,7 @@ export function SupplementTracker() {
                           }
                           onChange={e => handleDosageChange(us.id, e.target.value)}
                           onBlur={() => handleDosageBlur(us)}
-                          onKeyDown={e => handleDosageKeyDown(e, us)}
+                          onKeyDown={e => handleDosageKeyDown(e)}
                           min="0"
                           disabled={dosageLoading[us.id]}
                         />

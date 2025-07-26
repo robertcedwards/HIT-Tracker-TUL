@@ -20,7 +20,6 @@ function App() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [session, setSession] = useState<Session | null>(null)
   const [initialized, setInitialized] = useState(false)
-  const [view, setView] = useState<'exercises' | 'supplements'>('exercises');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -124,14 +123,12 @@ function App() {
                     </div>
                   </div>
                   {/* Main Content */}
-                  {view === 'exercises' && (
-                    <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-                      <ExerciseTable 
-                        exercises={exercises}
-                        onSaveExercise={saveExerciseData}
-                      />
-                    </div>
-                  )}
+                  <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
+                    <ExerciseTable 
+                      exercises={exercises}
+                      onSaveExercise={saveExerciseData}
+                    />
+                  </div>
 
                   {showModal && <InfoModal onClose={() => setShowModal(false)} />}
 
