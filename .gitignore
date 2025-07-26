@@ -129,3 +129,6 @@ dist
 .yarn/install-state.gz
 .pnp.*
 Connect Farcaster accounts for free with Sign In with Neynar (SIWN).pdf
+
+# Local Netlify folder
+.netlify

@@ -1,0 +1,98 @@
+import { supabase } from './supabase';
+import { Supplement, UserSupplement, SupplementUsage } from '../types/Supplement';
+
+// --- Supplement (global/shared) ---
+export async function searchSupplements(keyword: string): Promise<Supplement[]> {
+  const { data, error } = await supabase
+    .from('supplements')
+    .select('*')
+    .ilike('name', `%${keyword}%`)
+    .limit(10);
+  if (error) throw error;
+  return data;
+}
+
+export async function addSupplement(supplement: Partial<Supplement>): Promise<Supplement> {
+  const { data, error } = await supabase
+    .from('supplements')
+    .insert(supplement)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getSupplementById(id: string): Promise<Supplement | null> {
+  const { data, error } = await supabase
+    .from('supplements')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// --- User Supplement List ---
+export async function getUserSupplements(userId: string): Promise<UserSupplement[]> {
+  const { data, error } = await supabase
+    .from('user_supplements')
+    .select('*, supplement:supplement_id(*)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function addUserSupplement(userId: string, supplementId: string, custom_dosage_mg?: number, notes?: string): Promise<UserSupplement> {
+  const { data, error } = await supabase
+    .from('user_supplements')
+    .insert({ user_id: userId, supplement_id: supplementId, custom_dosage_mg, notes })
+    .select('*, supplement:supplement_id(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateUserSupplementDosage(userSupplementId: string, custom_dosage_mg: number): Promise<UserSupplement> {
+  const { data, error } = await supabase
+    .from('user_supplements')
+    .update({ custom_dosage_mg })
+    .eq('id', userSupplementId)
+    .select('*, supplement:supplement_id(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// --- Supplement Usage Log ---
+export async function logSupplementUsage(userId: string, userSupplementId: string, dosage_mg?: number): Promise<SupplementUsage> {
+  const { data, error } = await supabase
+    .from('supplement_usages')
+    .insert({ user_id: userId, user_supplement_id: userSupplementId, dosage_mg })
+    .select('*, user_supplement:user_supplement_id(*)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getSupplementUsages(userId: string, limit = 30): Promise<SupplementUsage[]> {
+  const { data, error } = await supabase
+    .from('supplement_usages')
+    .select('*, user_supplement:user_supplement_id(*, supplement:supplement_id(*))')
+    .eq('user_id', userId)
+    .order('timestamp', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data;
+}
+
+export async function updateSupplementUsage(usageId: string, updates: { timestamp?: string, dosage_mg?: number }): Promise<SupplementUsage> {
+  const { data, error } = await supabase
+    .from('supplement_usages')
+    .update(updates)
+    .eq('id', usageId)
+    .select('*, user_supplement:user_supplement_id(*, supplement:supplement_id(*))')
+    .single();
+  if (error) throw error;
+  return data;
+} 
