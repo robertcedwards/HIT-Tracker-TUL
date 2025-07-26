@@ -13,12 +13,14 @@ import { PrivacyPolicy } from './components/PrivacyPolicy'
 import { Terms } from './components/Terms'
 import { ProfilePage } from './components/ProfilePage'
 import { WeightUnitProvider } from './contexts/WeightUnitContext'
+import { SupplementTracker } from './components/SupplementTracker';
 
 function App() {
   const [showModal, setShowModal] = useState(false)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [session, setSession] = useState<Session | null>(null)
   const [initialized, setInitialized] = useState(false)
+  const [view, setView] = useState<'exercises' | 'supplements'>('exercises');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -75,6 +77,9 @@ function App() {
           <Route path="/profile" element={
             session ? <ProfilePage /> : <AuthComponent />
           } />
+          <Route path="/supplements" element={
+            session ? <SupplementTracker /> : <AuthComponent />
+          } />
           <Route path="/" element={
             session ? (
               <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -92,6 +97,12 @@ function App() {
                       </div>
                       <div className="flex items-center gap-3">
                         <Link
+                          to="/supplements"
+                          className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                        >
+                          Supplements
+                        </Link>
+                        <Link
                           to="/profile"
                           className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
                         >
@@ -108,14 +119,15 @@ function App() {
                       </div>
                     </div>
                   </div>
-
                   {/* Main Content */}
-                  <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-                    <ExerciseTable 
-                      exercises={exercises}
-                      onSaveExercise={saveExerciseData}
-                    />
-                  </div>
+                  {view === 'exercises' && (
+                    <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
+                      <ExerciseTable 
+                        exercises={exercises}
+                        onSaveExercise={saveExerciseData}
+                      />
+                    </div>
+                  )}
 
                   {showModal && <InfoModal onClose={() => setShowModal(false)} />}
 
