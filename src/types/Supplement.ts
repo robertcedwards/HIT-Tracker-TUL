@@ -8,6 +8,12 @@ export type Supplement = {
   imageUrl?: string | null;
   created_by?: string | null;
   created_at: string;
+  // Runtime property added for multi-ingredient detection
+  _ingredientInfo?: {
+    isMultiIngredient: boolean;
+    ingredients: Array<{ name: string; mg: number }>;
+    totalMg: number;
+  };
 };
 
 // User's personal supplement list entry
@@ -38,4 +44,10 @@ export type DsldProduct = {
   brandName?: string;
   defaultDosageMg?: number;
   imageUrl?: string;
+  // Runtime property added for multi-ingredient detection
+  _ingredientInfo?: {
+    isMultiIngredient: boolean;
+    ingredients: Array<{ name: string; mg: number }>;
+    totalMg: number;
+  };
 }; 

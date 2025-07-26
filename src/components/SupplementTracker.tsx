@@ -121,18 +121,51 @@ export function SupplementTracker() {
         
         // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
         if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          // Check if this is a single or multi-ingredient supplement
+          const ingredientsWithDosage = [];
+          
           for (const ingredient of source.ingredientRows) {
             if (ingredient.quantity && ingredient.quantity.length > 0) {
               for (const quantity of ingredient.quantity) {
-                // Look for dosage with "mg" specifically
-                const dosageMatch = String(quantity.quantity).match(/(\d+)\s*mg/i);
-                if (dosageMatch) {
-                  defaultDosageMg = parseInt(dosageMatch[1]);
-                  break;
+                const quantityStr = String(quantity.quantity);
+                
+                // Extract mg dosages
+                const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
+                if (mgMatch) {
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mgMatch[1])
+                  });
+                }
+                
+                // Extract mcg dosages and convert to mg (1000mcg = 1mg)
+                const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
+                if (mcgMatch) {
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mcgMatch[1]) / 1000
+                  });
                 }
               }
-              if (defaultDosageMg) break;
             }
+          }
+          
+          if (ingredientsWithDosage.length > 0) {
+            if (ingredientsWithDosage.length === 1) {
+              // Single ingredient - use its dosage
+              defaultDosageMg = Math.round(ingredientsWithDosage[0].mg);
+            } else {
+              // Multi-ingredient - sum all ingredients for total dose
+              const totalMg = ingredientsWithDosage.reduce((sum, ing) => sum + ing.mg, 0);
+              defaultDosageMg = Math.round(totalMg);
+            }
+            
+            // Add metadata to track ingredient info for search results
+            source._ingredientInfo = {
+              isMultiIngredient: ingredientsWithDosage.length > 1,
+              ingredients: ingredientsWithDosage,
+              totalMg: defaultDosageMg
+            };
           }
         }
         
@@ -234,18 +267,51 @@ export function SupplementTracker() {
         
         // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
         if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          // Check if this is a single or multi-ingredient supplement
+          const ingredientsWithDosage = [];
+          
           for (const ingredient of source.ingredientRows) {
             if (ingredient.quantity && ingredient.quantity.length > 0) {
               for (const quantity of ingredient.quantity) {
-                // Look for dosage with "mg" specifically
-                const dosageMatch = String(quantity.quantity).match(/(\d+)\s*mg/i);
-                if (dosageMatch) {
-                  defaultDosageMg = parseInt(dosageMatch[1]);
-                  break;
+                const quantityStr = String(quantity.quantity);
+                
+                // Extract mg dosages
+                const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
+                if (mgMatch) {
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mgMatch[1])
+                  });
+                }
+                
+                // Extract mcg dosages and convert to mg (1000mcg = 1mg)
+                const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
+                if (mcgMatch) {
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mcgMatch[1]) / 1000
+                  });
                 }
               }
-              if (defaultDosageMg) break;
             }
+          }
+          
+          if (ingredientsWithDosage.length > 0) {
+            if (ingredientsWithDosage.length === 1) {
+              // Single ingredient - use its dosage
+              defaultDosageMg = Math.round(ingredientsWithDosage[0].mg);
+            } else {
+              // Multi-ingredient - sum all ingredients for total dose
+              const totalMg = ingredientsWithDosage.reduce((sum, ing) => sum + ing.mg, 0);
+              defaultDosageMg = Math.round(totalMg);
+            }
+            
+            // Add metadata to track ingredient info for barcode results
+            source._ingredientInfo = {
+              isMultiIngredient: ingredientsWithDosage.length > 1,
+              ingredients: ingredientsWithDosage,
+              totalMg: defaultDosageMg
+            };
           }
         }
         
@@ -978,7 +1044,9 @@ export function SupplementTracker() {
                       <div className="flex flex-col">
                         <span className="font-medium">{s.name}</span>
                         {s.default_dosage_mg && (
-                          <span className="text-xs text-green-600">Recommended: {s.default_dosage_mg}mg</span>
+                          <span className="text-xs text-green-600">
+                            Recommended: {s._ingredientInfo?.isMultiIngredient ? '1 pill' : `${s.default_dosage_mg}mg`}
+                          </span>
                         )}
                       </div>
                       {s.brand && <span className="ml-2 text-xs text-gray-400">({s.brand})</span>}
@@ -1003,7 +1071,9 @@ export function SupplementTracker() {
                       <Plus size={14} /> Add {
                         customDosage 
                           ? `(${customDosage}mg)` 
-                          : (s.default_dosage_mg ? `(${s.default_dosage_mg}mg)` : '')
+                          : (s.default_dosage_mg 
+                              ? (s._ingredientInfo?.isMultiIngredient ? '(1 pill)' : `(${s.default_dosage_mg}mg)`)
+                              : '')
                       }
                     </button>
                   </div>
@@ -1016,7 +1086,9 @@ export function SupplementTracker() {
                         <div className="flex flex-col">
                           <span className="font-medium">{dsld.productName}</span>
                           {dsld.defaultDosageMg && (
-                            <span className="text-xs text-green-600">Recommended: {dsld.defaultDosageMg}mg</span>
+                            <span className="text-xs text-green-600">
+                              Recommended: {dsld._ingredientInfo?.isMultiIngredient ? '1 pill' : `${dsld.defaultDosageMg}mg`}
+                            </span>
                           )}
                         </div>
                         {dsld.brandName && <span className="ml-2 text-xs text-gray-400">({dsld.brandName})</span>}
@@ -1039,7 +1111,9 @@ export function SupplementTracker() {
                         <Plus size={14} /> Add {
                           customDosage 
                             ? `(${customDosage}mg)` 
-                            : (dsld.defaultDosageMg ? `(${dsld.defaultDosageMg}mg)` : '')
+                            : (dsld.defaultDosageMg 
+                                ? (dsld._ingredientInfo?.isMultiIngredient ? '(1 pill)' : `(${dsld.defaultDosageMg}mg)`)
+                                : '')
                         }
                       </button>
                     </div>
