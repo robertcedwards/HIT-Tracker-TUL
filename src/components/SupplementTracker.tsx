@@ -38,6 +38,39 @@ export function SupplementTracker() {
   const navigate = useNavigate();
   const [infoModal, setInfoModal] = useState<{ dsldId?: string; supplement?: Supplement | DsldProduct | null }>({});
 
+  // Helper function to filter out ingredient supplements from main list
+  const filterMainSupplements = (supplements: UserSupplement[]): UserSupplement[] => {
+    return supplements.filter(us => {
+      // Only show supplements that are not individual ingredients
+      // Individual ingredients are created automatically for multi-ingredient logging
+      // They can be identified by having a created_by field (user-created ingredients)
+      // and not having a dsld_id (not from official database)
+      const supplement = us.supplement;
+      if (!supplement) return true;
+      
+      // Show all supplements with dsld_id (from official database)
+      if (supplement.dsld_id) return true;
+      
+      // For supplements without dsld_id, check if they might be auto-created ingredients
+      // Auto-created ingredients typically have simple names and are created by users
+      if (supplement.created_by && !supplement.dsld_id) {
+        // Hide if it's likely an auto-created ingredient
+        // (this is a heuristic - we could add a specific flag in the future)
+        const simpleIngredientNames = [
+          'vitamin c', 'vitamin d', 'vitamin e', 'vitamin a', 'vitamin b', 
+          'n-acetyl-l-cysteine', 'bioflavonoids', 'black pepper extract',
+          'magnesium', 'calcium', 'zinc', 'iron', 'l-cysteine', 'l-tyrosine'
+        ];
+        const isLikelyIngredient = simpleIngredientNames.some(name => 
+          supplement.name.toLowerCase().includes(name) && supplement.name.toLowerCase().length < 30
+        );
+        return !isLikelyIngredient;
+      }
+      
+      return true;
+    });
+  };
+
   // Helper function to determine appropriate dosage unit
   const getDosageDisplayText = (userSupplement: UserSupplement, editingValue?: string) => {
     const dosageValue = editingValue !== undefined
@@ -196,7 +229,10 @@ export function SupplementTracker() {
   // Fetch user supplements
   useEffect(() => {
     if (!userId) return;
-    getUserSupplements(userId).then(setUserSupplements);
+    getUserSupplements(userId).then(supplements => {
+      const mainSupplements = filterMainSupplements(supplements);
+      setUserSupplements(mainSupplements);
+    });
     getSupplementUsages(userId, 30).then(setUsageLog);
   }, [userId]);
 
@@ -598,7 +634,8 @@ export function SupplementTracker() {
       setError(null); // Clear any previous errors
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
-      setUserSupplements(updated);
+      const mainSupplements = filterMainSupplements(updated);
+      setUserSupplements(mainSupplements);
     } catch (e: any) {
       logError(e, 'handleAddUserSupplement');
       const userMessage = getErrorMessage(e);
@@ -722,7 +759,8 @@ export function SupplementTracker() {
 
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
-      setUserSupplements(updated);
+      const mainSupplements = filterMainSupplements(updated);
+      setUserSupplements(mainSupplements);
       
       // Also refresh usage log to remove any orphaned entries
       const updatedUsage = await getSupplementUsages(userId, 30);
@@ -739,10 +777,75 @@ export function SupplementTracker() {
     if (!userId) return;
     setLogLoading(true);
     try {
-      const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
       const pillCount = pillCounts[userSupplement.id] || 1;
-      const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
-      await logSupplementUsage(userId, userSupplement.id, totalDosage);
+      const isMultiIngredient = userSupplement.supplement?._ingredientInfo?.isMultiIngredient;
+      
+      if (isMultiIngredient && userSupplement.supplement?._ingredientInfo?.ingredients) {
+        console.log(`🧬 Logging multi-ingredient supplement: ${pillCount} pills of ${userSupplement.supplement.name}`);
+        
+        // Log each ingredient separately
+        for (const ingredient of userSupplement.supplement._ingredientInfo.ingredients) {
+          const ingredientDosage = ingredient.mg * pillCount;
+          console.log(`📊 Logging ingredient: ${ingredient.name} = ${ingredientDosage}mg (${ingredient.mg}mg × ${pillCount})`);
+          
+          // Create or find ingredient supplement
+          let ingredientSupplement: Supplement;
+          try {
+            // Try to find existing ingredient supplement
+            const existingIngredients = await searchSupplements(ingredient.name);
+            const existingIngredient = existingIngredients.find(s => 
+              s.name.toLowerCase() === ingredient.name.toLowerCase() && s.default_dosage_mg === ingredient.mg
+            );
+            
+            if (existingIngredient) {
+              ingredientSupplement = existingIngredient;
+            } else {
+              // Create new ingredient supplement
+              ingredientSupplement = await addSupplement({
+                name: ingredient.name,
+                brand: userSupplement.supplement?.brand,
+                default_dosage_mg: ingredient.mg,
+                created_by: userId,
+                // Mark as ingredient to distinguish from main supplements
+                dsld_id: null
+              });
+            }
+            
+            // Create user supplement entry for ingredient (if not exists)
+            let ingredientUserSupplement: UserSupplement;
+            const existingUserIngredients = await getUserSupplements(userId);
+            const existingUserIngredient = existingUserIngredients.find(us => 
+              us.supplement?.id === ingredientSupplement.id
+            );
+            
+            if (existingUserIngredient) {
+              ingredientUserSupplement = existingUserIngredient;
+            } else {
+              // Create user supplement for ingredient
+              await addUserSupplement(userId, ingredientSupplement.id, ingredient.mg);
+              const updatedUserSupplements = await getUserSupplements(userId);
+              ingredientUserSupplement = updatedUserSupplements.find(us => 
+                us.supplement?.id === ingredientSupplement.id
+              )!;
+            }
+            
+            // Log the ingredient usage
+            await logSupplementUsage(userId, ingredientUserSupplement.id, ingredientDosage);
+            
+          } catch (error) {
+            console.error(`Failed to log ingredient ${ingredient.name}:`, error);
+          }
+        }
+        
+        console.log(`✅ Successfully logged all ingredients for ${userSupplement.supplement.name}`);
+      } else {
+        // Single ingredient supplement - use existing logic
+        const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
+        const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
+        console.log(`📊 Logging single ingredient: ${userSupplement.supplement?.name} = ${totalDosage}mg`);
+        await logSupplementUsage(userId, userSupplement.id, totalDosage);
+      }
+      
       // Refresh usage log
       const updated = await getSupplementUsages(userId, 30);
       setUsageLog(updated);
@@ -774,7 +877,8 @@ export function SupplementTracker() {
       // Refresh user supplements
       if (userId) {
         const updated = await getUserSupplements(userId);
-        setUserSupplements(updated);
+        const mainSupplements = filterMainSupplements(updated);
+        setUserSupplements(mainSupplements);
       }
     } catch (e) {
     } finally {
@@ -1000,7 +1104,8 @@ export function SupplementTracker() {
       
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
-      setUserSupplements(updated);
+      const mainSupplements = filterMainSupplements(updated);
+      setUserSupplements(mainSupplements);
       
       setError(`✅ Updated ${supplementsNeedingDosage.length} supplements with missing dosages.`);
     } catch (e: any) {
