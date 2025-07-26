@@ -38,6 +38,88 @@ export function SupplementTracker() {
   const navigate = useNavigate();
   const [infoModal, setInfoModal] = useState<{ dsldId?: string; supplement?: Supplement | DsldProduct | null }>({});
 
+  // Helper function to determine appropriate dosage unit
+  const getDosageDisplayText = (userSupplement: UserSupplement, editingValue?: string) => {
+    const dosageValue = editingValue !== undefined
+      ? editingValue
+      : userSupplement.custom_dosage_mg != null
+        ? String(userSupplement.custom_dosage_mg)
+        : userSupplement.supplement?.default_dosage_mg != null
+          ? String(userSupplement.supplement.default_dosage_mg)
+          : '';
+
+    if (!dosageValue || dosageValue === '0') return '-';
+
+    // Check if it's a multi-ingredient supplement
+    const isMultiIngredient = userSupplement.supplement?._ingredientInfo?.isMultiIngredient;
+    
+    if (isMultiIngredient) {
+      // For multi-ingredient supplements, show as pills/tablets
+      const count = parseInt(dosageValue);
+      return count === 1 ? '1 pill' : `${count} pills`;
+    } else {
+      // For single-ingredient supplements, check for common units
+      const supplement = userSupplement.supplement;
+      const supplementName = supplement?.name?.toLowerCase() || '';
+      
+      // Check for vitamin D (often measured in IU)
+      if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) {
+        return `${dosageValue} IU`;
+      }
+      
+      // Check for vitamin E (often measured in IU)  
+      if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) {
+        return `${dosageValue} IU`;
+      }
+      
+      // Check for vitamin A (often measured in IU)
+      if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) {
+        return `${dosageValue} IU`;
+      }
+      
+      // Default to mg for most supplements
+      return `${dosageValue} mg`;
+    }
+  };
+
+  // Helper function for usage log dosage display
+  const getUsageLogDosageText = (usage: SupplementUsage) => {
+    const dosageValue = usage.dosage_mg || usage.user_supplement?.custom_dosage_mg || usage.user_supplement?.supplement?.default_dosage_mg;
+    
+    if (!dosageValue) return '-';
+
+    // Check if it's a multi-ingredient supplement
+    const isMultiIngredient = usage.user_supplement?.supplement?._ingredientInfo?.isMultiIngredient;
+    
+    if (isMultiIngredient) {
+      // For multi-ingredient supplements, show as pills/tablets
+      const count = parseInt(String(dosageValue));
+      return count === 1 ? '1 pill' : `${count} pills`;
+    } else {
+      // For single-ingredient supplements, check for common units
+      const supplement = usage.user_supplement?.supplement;
+      const supplementName = supplement?.name?.toLowerCase() || '';
+      
+      // Check for vitamin D (often measured in IU)
+      if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) {
+        return `${dosageValue} IU`;
+      }
+      
+      // Check for vitamin E (often measured in IU)  
+      if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) {
+        return `${dosageValue} IU`;
+      }
+      
+      // Check for vitamin A (often measured in IU)
+      if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) {
+        return `${dosageValue} IU`;
+      }
+      
+      // Default to mg for most supplements
+      return `${dosageValue} mg`;
+    }
+  };
+
   // Auto-fill dosage input when search results change
   useEffect(() => {
     let defaultDosage: number | null = null;
@@ -1285,7 +1367,7 @@ export function SupplementTracker() {
                 <tr className="bg-gray-100">
                   <th className="px-2 py-1 text-left">Name</th>
                   <th className="px-2 py-1 text-left hidden md:table-cell">Brand</th>
-                  <th className="px-2 py-1 text-left hidden md:table-cell">Dosage (mg)</th>
+                  <th className="px-2 py-1 text-left hidden md:table-cell">Dosage</th>
                   <th className="px-2 py-1 text-center">Log</th>
                 </tr>
               </thead>
@@ -1322,22 +1404,14 @@ export function SupplementTracker() {
                             )}
                             {/* Show dosage info on mobile */}
                             <div className="text-xs text-gray-500">
-                              {(
-                                editingDosage[us.id] !== undefined
-                                  ? editingDosage[us.id]
-                                  : us.custom_dosage_mg != null
-                                    ? String(us.custom_dosage_mg)
-                                    : us.supplement?.default_dosage_mg != null
-                                      ? String(us.supplement.default_dosage_mg)
-                                      : '0'
-                              )}mg
+                              {getDosageDisplayText(us, editingDosage[us.id])}
                             </div>
                           </div>
                         </div>
                       </td>
                       <td className="px-2 py-1 hidden md:table-cell">{us.supplement?.brand || '-'}</td>
                     <td className="px-2 py-1 hidden md:table-cell">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <input
                           type="number"
                           className="w-16 md:w-20 p-1 border rounded text-center"
@@ -1356,6 +1430,19 @@ export function SupplementTracker() {
                           min="0"
                           disabled={dosageLoading[us.id]}
                         />
+                        <span className="text-xs text-gray-500">
+                          {(() => {
+                            // Get the unit for this supplement
+                            const isMultiIngredient = us.supplement?._ingredientInfo?.isMultiIngredient;
+                            if (isMultiIngredient) return 'pills';
+                            
+                            const supplementName = us.supplement?.name?.toLowerCase() || '';
+                            if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) return 'IU';
+                            if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) return 'IU';
+                            if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) return 'IU';
+                            return 'mg';
+                          })()}
+                        </span>
                         {dosageLoading[us.id] && <Loader2 className="animate-spin text-blue-500" size={16} />}
                       </div>
                     </td>
@@ -1450,7 +1537,7 @@ export function SupplementTracker() {
                 <tr className="bg-gray-100">
                   <th className="px-2 py-1 text-left">Date</th>
                   <th className="px-2 py-1 text-left">Supplement</th>
-                  <th className="px-2 py-1 text-left">Dosage (mg)</th>
+                  <th className="px-2 py-1 text-left">Dosage</th>
                   <th className="px-2 py-1 text-left">Actions</th>
                 </tr>
               </thead>
@@ -1470,13 +1557,28 @@ export function SupplementTracker() {
                         </td>
                         <td className="px-2 py-1">{u.user_supplement?.supplement?.name || '-'}</td>
                         <td className="px-2 py-1">
-                          <input
-                            type="number"
-                            className="w-20 p-1 border rounded text-xs text-center"
-                            value={editedUsage.dosage_mg}
-                            onChange={e => handleUsageFieldChange('dosage_mg', e.target.value)}
-                            disabled={usageLoading}
-                          />
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              className="w-16 p-1 border rounded text-xs text-center"
+                              value={editedUsage.dosage_mg}
+                              onChange={e => handleUsageFieldChange('dosage_mg', e.target.value)}
+                              disabled={usageLoading}
+                            />
+                            <span className="text-xs text-gray-500">
+                              {(() => {
+                                // Get the unit for this supplement in usage log
+                                const isMultiIngredient = u.user_supplement?.supplement?._ingredientInfo?.isMultiIngredient;
+                                if (isMultiIngredient) return 'pills';
+                                
+                                const supplementName = u.user_supplement?.supplement?.name?.toLowerCase() || '';
+                                if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) return 'IU';
+                                if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) return 'IU';
+                                if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) return 'IU';
+                                return 'mg';
+                              })()}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-2 py-1 flex gap-1">
                           <button className="p-1 bg-green-500 text-white rounded hover:bg-green-600" onClick={() => handleSaveUsage(u)} disabled={usageLoading}><Check size={14} /></button>
@@ -1487,7 +1589,7 @@ export function SupplementTracker() {
                       <>
                         <td className="px-2 py-1">{new Date(u.timestamp).toLocaleString()}</td>
                         <td className="px-2 py-1">{u.user_supplement?.supplement?.name || '-'}</td>
-                        <td className="px-2 py-1">{u.dosage_mg || u.user_supplement?.custom_dosage_mg || u.user_supplement?.supplement?.default_dosage_mg || '-'}</td>
+                        <td className="px-2 py-1">{getUsageLogDosageText(u)}</td>
                         <td className="px-2 py-1 flex gap-1">
                           <button className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600" onClick={() => handleEditUsage(u)} disabled={usageLoading}><Edit2 size={14} /></button>
                           <button className="p-1 bg-red-500 text-white rounded hover:bg-red-600" onClick={() => handleDeleteUsage(u)} disabled={usageLoading}><Trash2 size={14} /></button>
