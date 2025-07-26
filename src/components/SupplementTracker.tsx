@@ -558,6 +558,46 @@ export function SupplementTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCamera, videoRef.current]);
 
+  // Backfill missing dosages for existing supplements
+  const backfillMissingDosages = async () => {
+    if (!userId) return;
+    
+    const supplementsNeedingDosage = userSupplements.filter(us => 
+      !us.custom_dosage_mg && 
+      us.supplement?.default_dosage_mg && 
+      us.supplement.default_dosage_mg > 0
+    );
+    
+    if (supplementsNeedingDosage.length === 0) {
+      setError('No supplements found that need dosage backfill.');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      for (const userSupplement of supplementsNeedingDosage) {
+        if (userSupplement.supplement?.default_dosage_mg) {
+          await updateUserSupplementDosage(
+            userSupplement.id, 
+            userSupplement.supplement.default_dosage_mg
+          );
+        }
+      }
+      
+      // Refresh user supplements
+      const updated = await getUserSupplements(userId);
+      setUserSupplements(updated);
+      
+      setError(`✅ Updated ${supplementsNeedingDosage.length} supplements with missing dosages.`);
+    } catch (e: any) {
+      logError(e, 'backfillMissingDosages');
+      const userMessage = getErrorMessage(e);
+      setError(userMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Chart data: group by date, supplement
   // Build chart data: one object per date, each supplement as a key
   const supplementNames = Array.from(new Set(usageLog.map(u => u.user_supplement?.supplement?.name).filter((n): n is string => typeof n === 'string' && !!n)));
@@ -928,7 +968,19 @@ export function SupplementTracker() {
 
         {/* User supplement list */}
         <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-center">My Supplements</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-center flex-1">My Supplements</h2>
+            {userSupplements.some(us => !us.custom_dosage_mg && us.supplement?.default_dosage_mg) && (
+              <button
+                onClick={backfillMissingDosages}
+                className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 disabled:opacity-50"
+                disabled={loading}
+                title="Auto-fill missing dosages from database"
+              >
+                Fix Dosages
+              </button>
+            )}
+          </div>
           <div className="bg-gray-50 rounded-xl p-4">
             {userSupplements.length === 0 && <div className="text-gray-400">No supplements added yet.</div>}
             <table className="w-full text-sm">
