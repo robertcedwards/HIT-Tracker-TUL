@@ -38,6 +38,37 @@ export function SupplementTracker() {
   const navigate = useNavigate();
   const [infoModal, setInfoModal] = useState<{ dsldId?: string; supplement?: Supplement | DsldProduct | null }>({});
 
+  // Auto-fill dosage input when search results change
+  useEffect(() => {
+    let defaultDosage: number | null = null;
+    
+    // Check search results first (Supplement type)
+    const searchResultWithDosage = searchResults.find(s => s.default_dosage_mg);
+    if (searchResultWithDosage) {
+      defaultDosage = searchResultWithDosage.default_dosage_mg!;
+    }
+    
+    // Then check DSLD results (DsldProduct type)
+    if (!defaultDosage) {
+      const dsldResultWithDosage = dsldResults.find(d => d.defaultDosageMg);
+      if (dsldResultWithDosage) {
+        defaultDosage = dsldResultWithDosage.defaultDosageMg!;
+      }
+    }
+    
+    // Auto-fill if we found a dosage and the field is empty
+    if (defaultDosage && !customDosage) {
+      console.log(`🔧 Auto-filling dosage field with: ${defaultDosage}mg`);
+      setCustomDosage(String(defaultDosage));
+    }
+    
+    // Clear dosage when no results
+    if (searchResults.length === 0 && dsldResults.length === 0 && customDosage) {
+      console.log(`🔧 Clearing dosage field - no search results`);
+      setCustomDosage('');
+    }
+  }, [searchResults, dsldResults]);
+
   useEffect(() => {
     // No-op for production
     return () => {};
@@ -121,17 +152,23 @@ export function SupplementTracker() {
         
         // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
         if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          console.log(`🧪 Parsing ingredients for ${source.fullName || source.productName || source.name}:`, source.ingredientRows);
+          
           // Check if this is a single or multi-ingredient supplement
           const ingredientsWithDosage = [];
           
           for (const ingredient of source.ingredientRows) {
+            console.log(`🔬 Processing ingredient:`, ingredient);
+            
             if (ingredient.quantity && ingredient.quantity.length > 0) {
               for (const quantity of ingredient.quantity) {
                 const quantityStr = String(quantity.quantity);
+                console.log(`🔬 Checking quantity string: "${quantityStr}"`);
                 
                 // Extract mg dosages
                 const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
                 if (mgMatch) {
+                  console.log(`✅ Found mg dosage: ${mgMatch[1]}mg for ${ingredient.name}`);
                   ingredientsWithDosage.push({
                     name: ingredient.name,
                     mg: parseFloat(mgMatch[1])
@@ -141,6 +178,7 @@ export function SupplementTracker() {
                 // Extract mcg dosages and convert to mg (1000mcg = 1mg)
                 const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
                 if (mcgMatch) {
+                  console.log(`✅ Found mcg dosage: ${mcgMatch[1]}mcg (${parseFloat(mcgMatch[1]) / 1000}mg) for ${ingredient.name}`);
                   ingredientsWithDosage.push({
                     name: ingredient.name,
                     mg: parseFloat(mcgMatch[1]) / 1000
@@ -150,14 +188,18 @@ export function SupplementTracker() {
             }
           }
           
+          console.log(`🔬 Total ingredients with dosage found:`, ingredientsWithDosage);
+          
           if (ingredientsWithDosage.length > 0) {
             if (ingredientsWithDosage.length === 1) {
               // Single ingredient - use its dosage
               defaultDosageMg = Math.round(ingredientsWithDosage[0].mg);
+              console.log(`✅ Single ingredient detected: ${defaultDosageMg}mg`);
             } else {
               // Multi-ingredient - sum all ingredients for total dose
               const totalMg = ingredientsWithDosage.reduce((sum, ing) => sum + ing.mg, 0);
               defaultDosageMg = Math.round(totalMg);
+              console.log(`✅ Multi-ingredient detected: ${defaultDosageMg}mg total from ${ingredientsWithDosage.length} ingredients`);
             }
             
             // Add metadata to track ingredient info for search results
@@ -166,6 +208,10 @@ export function SupplementTracker() {
               ingredients: ingredientsWithDosage,
               totalMg: defaultDosageMg
             };
+            
+            console.log(`✅ Set _ingredientInfo:`, source._ingredientInfo);
+          } else {
+            console.log(`❌ No ingredients with dosage found`);
           }
         }
         
@@ -267,17 +313,23 @@ export function SupplementTracker() {
         
         // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
         if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          console.log(`🧪 [BARCODE] Parsing ingredients for ${source.fullName || source.productName || source.name}:`, source.ingredientRows);
+          
           // Check if this is a single or multi-ingredient supplement
           const ingredientsWithDosage = [];
           
           for (const ingredient of source.ingredientRows) {
+            console.log(`🔬 [BARCODE] Processing ingredient:`, ingredient);
+            
             if (ingredient.quantity && ingredient.quantity.length > 0) {
               for (const quantity of ingredient.quantity) {
                 const quantityStr = String(quantity.quantity);
+                console.log(`🔬 [BARCODE] Checking quantity string: "${quantityStr}"`);
                 
                 // Extract mg dosages
                 const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
                 if (mgMatch) {
+                  console.log(`✅ [BARCODE] Found mg dosage: ${mgMatch[1]}mg for ${ingredient.name}`);
                   ingredientsWithDosage.push({
                     name: ingredient.name,
                     mg: parseFloat(mgMatch[1])
@@ -287,6 +339,7 @@ export function SupplementTracker() {
                 // Extract mcg dosages and convert to mg (1000mcg = 1mg)
                 const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
                 if (mcgMatch) {
+                  console.log(`✅ [BARCODE] Found mcg dosage: ${mcgMatch[1]}mcg (${parseFloat(mcgMatch[1]) / 1000}mg) for ${ingredient.name}`);
                   ingredientsWithDosage.push({
                     name: ingredient.name,
                     mg: parseFloat(mcgMatch[1]) / 1000
@@ -296,14 +349,18 @@ export function SupplementTracker() {
             }
           }
           
+          console.log(`🔬 [BARCODE] Total ingredients with dosage found:`, ingredientsWithDosage);
+          
           if (ingredientsWithDosage.length > 0) {
             if (ingredientsWithDosage.length === 1) {
               // Single ingredient - use its dosage
               defaultDosageMg = Math.round(ingredientsWithDosage[0].mg);
+              console.log(`✅ [BARCODE] Single ingredient detected: ${defaultDosageMg}mg`);
             } else {
               // Multi-ingredient - sum all ingredients for total dose
               const totalMg = ingredientsWithDosage.reduce((sum, ing) => sum + ing.mg, 0);
               defaultDosageMg = Math.round(totalMg);
+              console.log(`✅ [BARCODE] Multi-ingredient detected: ${defaultDosageMg}mg total from ${ingredientsWithDosage.length} ingredients`);
             }
             
             // Add metadata to track ingredient info for barcode results
@@ -312,6 +369,10 @@ export function SupplementTracker() {
               ingredients: ingredientsWithDosage,
               totalMg: defaultDosageMg
             };
+            
+            console.log(`✅ [BARCODE] Set _ingredientInfo:`, source._ingredientInfo);
+          } else {
+            console.log(`❌ [BARCODE] No ingredients with dosage found`);
           }
         }
         
@@ -1144,7 +1205,7 @@ export function SupplementTracker() {
                   <input
                     type="number"
                     className="p-2 border rounded-lg"
-                    placeholder="Override dosage (mg, optional)"
+                    placeholder="Dosage (mg) - auto-filled from search results"
                     value={customDosage}
                     onChange={e => setCustomDosage(e.target.value)}
                   />
