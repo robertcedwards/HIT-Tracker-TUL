@@ -201,7 +201,7 @@ export function SupplementTracker() {
     setLoading(true);
     try {
       await addUserSupplement(userId, supplement.id, customDosage ? Number(customDosage) : undefined);
-      setCustomDosage('');
+      setCustomDosage(''); // Clear custom dosage after successful add
       setSearch(''); // Only clear after successful add
       setSearchResults([]);
       setDsldResults([]);
@@ -779,6 +779,27 @@ export function SupplementTracker() {
                 {customAddMode ? 'Cancel' : 'Add Custom'}
               </button>
             </form>
+            
+            {/* Dosage override field for search results */}
+            {!loading && search && (searchResults.length > 0 || dsldResults.length > 0) && (
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Dosage Override:</label>
+                  <input
+                    type="number"
+                    className="w-24 p-1 border rounded text-center"
+                    placeholder="mg"
+                    value={customDosage}
+                    onChange={e => setCustomDosage(e.target.value)}
+                    min="0"
+                  />
+                  <span className="text-xs text-gray-600">
+                    Leave empty to use recommended dosages
+                  </span>
+                </div>
+              </div>
+            )}
+            
             {error && <div className="text-red-600 mb-2">{error}</div>}
             {loading && <div className="flex items-center gap-2 text-blue-600"><Loader2 className="animate-spin" size={18} /> Loading...</div>}
             {/* Results only after search */}
@@ -788,7 +809,12 @@ export function SupplementTracker() {
                 {searchResults.map(s => (
                   <div key={s.id} className="flex items-center justify-between p-2 hover:bg-blue-50 rounded cursor-pointer">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{s.name}</span>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{s.name}</span>
+                        {s.default_dosage_mg && (
+                          <span className="text-xs text-green-600">Recommended: {s.default_dosage_mg}mg</span>
+                        )}
+                      </div>
                       {s.brand && <span className="ml-2 text-xs text-gray-400">({s.brand})</span>}
                       {/* Info button for custom/local supplements: only if dsldId exists */}
                       {typeof s.dsld_id === 'string' && s.dsld_id && (
@@ -800,9 +826,19 @@ export function SupplementTracker() {
                     <button
                       className="flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
                       onMouseDown={e => e.preventDefault()}
-                      onClick={() => handleAddUserSupplement(s, customDosage)}
+                      onClick={() => {
+                        // Use custom dosage if specified, otherwise use supplement's default dosage
+                        const dosageToUse = customDosage 
+                          ? customDosage 
+                          : (s.default_dosage_mg ? String(s.default_dosage_mg) : undefined);
+                        handleAddUserSupplement(s, dosageToUse);
+                      }}
                     >
-                      <Plus size={14} /> Add
+                      <Plus size={14} /> Add {
+                        customDosage 
+                          ? `(${customDosage}mg)` 
+                          : (s.default_dosage_mg ? `(${s.default_dosage_mg}mg)` : '')
+                      }
                     </button>
                   </div>
                 ))}
@@ -813,6 +849,9 @@ export function SupplementTracker() {
                       <div className="flex items-center gap-2">
                         <div className="flex flex-col">
                           <span className="font-medium">{dsld.productName}</span>
+                          {dsld.defaultDosageMg && (
+                            <span className="text-xs text-green-600">Recommended: {dsld.defaultDosageMg}mg</span>
+                          )}
                         </div>
                         {dsld.brandName && <span className="ml-2 text-xs text-gray-400">({dsld.brandName})</span>}
                         {/* Info button for DSLD supplements */}
@@ -823,9 +862,19 @@ export function SupplementTracker() {
                       <button
                         className="flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
                         onMouseDown={e => e.preventDefault()}
-                        onClick={() => handleAddDsldSupplement(dsld, customDosage)}
+                        onClick={() => {
+                          // Use custom dosage if specified, otherwise use API dosage
+                          const dosageToUse = customDosage 
+                            ? customDosage 
+                            : (dsld.defaultDosageMg ? String(dsld.defaultDosageMg) : undefined);
+                          handleAddDsldSupplement(dsld, dosageToUse);
+                        }}
                       >
-                        <Plus size={14} /> Add
+                        <Plus size={14} /> Add {
+                          customDosage 
+                            ? `(${customDosage}mg)` 
+                            : (dsld.defaultDosageMg ? `(${dsld.defaultDosageMg}mg)` : '')
+                        }
                       </button>
                     </div>
                   );
@@ -855,10 +904,15 @@ export function SupplementTracker() {
                   <input
                     type="number"
                     className="p-2 border rounded-lg"
-                    placeholder="Dosage (mg, optional)"
+                    placeholder="Override dosage (mg, optional)"
                     value={customDosage}
                     onChange={e => setCustomDosage(e.target.value)}
                   />
+                  {(searchResults.some(s => s.default_dosage_mg) || dsldResults.some(d => d.defaultDosageMg)) && (
+                    <div className="text-xs text-blue-600 mt-1">
+                      💡 Supplements with recommended dosages will use their default values. Use this field to override if needed.
+                    </div>
+                  )}
                   <button
                     className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                     onClick={handleAddCustomSupplement}
