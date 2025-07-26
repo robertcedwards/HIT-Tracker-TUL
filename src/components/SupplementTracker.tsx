@@ -365,9 +365,39 @@ export function SupplementTracker() {
     
     const onDetected = (result: any) => {
       if (cancelled) return;
-      if (timeoutId) clearTimeout(timeoutId);
       
+      // Add quality validation to prevent false positives
       const code = result.codeResult.code;
+      const format = result.codeResult.format;
+      
+      // Validate barcode length and format
+      const isValidBarcode = (code: string, format: string) => {
+        // Remove any spaces or invalid characters
+        const cleanCode = code.replace(/\s+/g, '');
+        
+        // Basic length validation for common formats
+        if (format === 'ean_13' && cleanCode.length !== 13) return false;
+        if (format === 'ean_8' && cleanCode.length !== 8) return false;
+        if (format === 'upc_a' && cleanCode.length !== 12) return false;
+        if (format === 'upc_e' && cleanCode.length !== 8) return false;
+        
+        // Must be all digits for UPC/EAN codes
+        if (['ean_13', 'ean_8', 'upc_a', 'upc_e'].includes(format)) {
+          if (!/^\d+$/.test(cleanCode)) return false;
+        }
+        
+        // Minimum length check for all codes
+        if (cleanCode.length < 6) return false;
+        
+        return true;
+      };
+      
+      if (!isValidBarcode(code, format)) {
+        console.log('Invalid barcode detected:', { code, format });
+        return; // Ignore invalid codes
+      }
+      
+      if (timeoutId) clearTimeout(timeoutId);
       setBarcode(code);
       
       // Stop QuaggaJS immediately
@@ -383,7 +413,7 @@ export function SupplementTracker() {
       if (cancelled) return;
     };
 
-    // Initialize QuaggaJS
+    // Initialize QuaggaJS with more selective settings
     Quagga.init({
       inputStream: {
         name: "Live",
@@ -396,24 +426,20 @@ export function SupplementTracker() {
         }
       },
       locator: {
-        patchSize: "medium",
-        halfSample: true
+        patchSize: "large", // Larger patch size for better accuracy
+        halfSample: false   // Don't downsample for better quality
       },
-      numOfWorkers: 2,
+      numOfWorkers: 1, // Reduce workers to avoid conflicts
       decoder: {
         readers: [
-          "code_128_reader",
-          "ean_reader",
-          "ean_8_reader",
-          "code_39_reader",
-          "code_39_vin_reader",
-          "codabar_reader",
-          "upc_reader",
-          "upc_e_reader",
-          "i2of5_reader"
+          // Focus on most common supplement barcode formats
+          "ean_reader",     // EAN-13 (most common internationally)
+          "upc_reader",     // UPC-A (common in US)
+          "ean_8_reader",   // EAN-8 (shorter format)
+          "upc_e_reader"    // UPC-E (compact format)
         ]
       },
-      locate: true
+      locate: false // Require precise positioning for better accuracy
     }, (err: any) => {
       if (cancelled) return;
       
@@ -444,8 +470,9 @@ export function SupplementTracker() {
       // Stop QuaggaJS
       try {
         Quagga.stop();
-        Quagga.offDetected(onDetected);
-        Quagga.offProcessed(onProcessed);
+        // Clear all event listeners
+        Quagga.offDetected();
+        Quagga.offProcessed();
       } catch (e) {
         // Ignore cleanup errors
       }
@@ -611,9 +638,24 @@ export function SupplementTracker() {
                   <h3 className="text-lg font-semibold mb-2">Scan Barcode</h3>
                   <div className="relative">
                     <div ref={videoRef} className="w-72 h-48 bg-black rounded overflow-hidden" />
+                    {/* Scanning guide overlay */}
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-48 h-16 border-2 border-red-500 bg-red-500/10 rounded">
+                          <div className="w-full h-full flex items-center justify-center">
+                            <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">
+                              Position barcode here
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  {cameraError && <div className="text-red-600">{cameraError}</div>}
-                  <div className="text-xs text-gray-500">Align the barcode within the frame</div>
+                  {cameraError && <div className="text-red-600 text-sm">{cameraError}</div>}
+                  <div className="text-xs text-gray-500 text-center max-w-xs">
+                    Position the barcode horizontally within the red rectangle.<br/>
+                    Hold steady until detected automatically.
+                  </div>
                 </div>
               </div>
             )}

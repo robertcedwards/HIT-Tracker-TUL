@@ -34,8 +34,8 @@ declare module 'quagga' {
     stop(): void;
     onDetected(callback: (result: QuaggaResult) => void): void;
     onProcessed(callback: (result: any) => void): void;
-    offDetected(callback: (result: QuaggaResult) => void): void;
-    offProcessed(callback: (result: any) => void): void;
+    offDetected(callback?: (result: QuaggaResult) => void): void;
+    offProcessed(callback?: (result: any) => void): void;
   }
 
   const Quagga: Quagga;
