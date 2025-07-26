@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { searchSupplements, addSupplement, getUserSupplements, addUserSupplement, logSupplementUsage, getSupplementUsages, updateUserSupplementDosage, updateSupplementUsage } from '../lib/supplements';
 import { Supplement, UserSupplement, SupplementUsage, DsldProduct } from '../types/Supplement';
 import { supabase } from '../lib/supabase';
@@ -142,6 +142,75 @@ export function SupplementTracker() {
       // Default to mg for most supplements
       return `${dosageValue} mg`;
     }
+  };
+
+  // Helper function to check if supplement is an auto-created ingredient
+  const isAutoCreatedIngredient = (supplement: Supplement): boolean => {
+    if (!supplement.created_by || supplement.dsld_id) return false;
+    
+    const simpleIngredientNames = [
+      'vitamin c', 'vitamin d', 'vitamin e', 'vitamin a', 'vitamin b', 
+      'n-acetyl-l-cysteine', 'bioflavonoids', 'black pepper extract',
+      'magnesium', 'calcium', 'zinc', 'iron', 'l-cysteine', 'l-tyrosine',
+      'alpha-lipoic acid', 'ala', 'nac'
+    ];
+    
+    const name = supplement.name.toLowerCase();
+    return simpleIngredientNames.some(ingredientName => 
+      name.includes(ingredientName) && name.length < 30
+    );
+  };
+
+  // Helper function to group usage log entries for hierarchical display
+  const groupUsageLogEntries = (usageLog: SupplementUsage[]): Array<{main: SupplementUsage, ingredients: SupplementUsage[]}> => {
+    const grouped: Array<{main: SupplementUsage, ingredients: SupplementUsage[]}> = [];
+    const processed = new Set<string>();
+    
+    // First pass: find main supplement entries
+    for (const usage of usageLog) {
+      if (processed.has(usage.id)) continue;
+      
+      const supplement = usage.user_supplement?.supplement;
+      const isMainSupplement = supplement && !isAutoCreatedIngredient(supplement);
+      
+      if (isMainSupplement) {
+        const mainEntry = usage;
+        const ingredientEntries: SupplementUsage[] = [];
+        
+        // Look for ingredient entries within 5 seconds of this main entry
+        const mainTime = new Date(mainEntry.timestamp).getTime();
+        const timeWindow = 5000; // 5 seconds
+        
+        for (const potentialIngredient of usageLog) {
+          if (processed.has(potentialIngredient.id)) continue;
+          if (potentialIngredient.id === mainEntry.id) continue;
+          
+          const ingredientTime = new Date(potentialIngredient.timestamp).getTime();
+          const timeDiff = Math.abs(ingredientTime - mainTime);
+          
+          if (timeDiff <= timeWindow) {
+            const ingredientSupplement = potentialIngredient.user_supplement?.supplement;
+            if (ingredientSupplement && isAutoCreatedIngredient(ingredientSupplement)) {
+              ingredientEntries.push(potentialIngredient);
+              processed.add(potentialIngredient.id);
+            }
+          }
+        }
+        
+        grouped.push({ main: mainEntry, ingredients: ingredientEntries });
+        processed.add(mainEntry.id);
+      }
+    }
+    
+    // Second pass: add any remaining entries as standalone
+    for (const usage of usageLog) {
+      if (!processed.has(usage.id)) {
+        grouped.push({ main: usage, ingredients: [] });
+        processed.add(usage.id);
+      }
+    }
+    
+    return grouped;
   };
 
   // Helper function for usage log dosage display
@@ -812,10 +881,16 @@ export function SupplementTracker() {
                                (userSupplement.supplement && isLikelyMultiIngredient(userSupplement.supplement));
       
       if (isMultiIngredient) {
+        // Always log the main supplement entry first (for display purposes)
+        const mainDosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
+        const mainTotalDosage = typeof mainDosage === 'number' ? mainDosage * pillCount : pillCount;
+        console.log(`📋 Logging main supplement entry: ${userSupplement.supplement?.name} = ${pillCount} pills`);
+        await logSupplementUsage(userId, userSupplement.id, mainTotalDosage);
+        
         if (userSupplement.supplement?._ingredientInfo?.ingredients) {
-          console.log(`🧬 Logging multi-ingredient supplement: ${pillCount} pills of ${userSupplement.supplement.name}`);
+          console.log(`🧬 Logging individual ingredients for: ${pillCount} pills of ${userSupplement.supplement.name}`);
           
-          // Log each ingredient separately
+          // Log each ingredient separately (for chart data)
           for (const ingredient of userSupplement.supplement._ingredientInfo.ingredients) {
             const ingredientDosage = ingredient.mg * pillCount;
             console.log(`📊 Logging ingredient: ${ingredient.name} = ${ingredientDosage}mg (${ingredient.mg}mg × ${pillCount})`);
@@ -869,7 +944,7 @@ export function SupplementTracker() {
             }
           }
           
-          console.log(`✅ Successfully logged all ingredients for ${userSupplement.supplement.name}`);
+          console.log(`✅ Successfully logged main entry + all ingredients for ${userSupplement.supplement.name}`);
         } else {
           // Multi-ingredient supplement detected but no ingredient data available
           // Try to fetch ingredient data from DSLD if dsld_id is available
@@ -920,7 +995,7 @@ export function SupplementTracker() {
                 
                 console.log(`🧬 Extracted ${ingredientsWithDosage.length} ingredients:`, ingredientsWithDosage);
                 
-                // Log each ingredient separately if we found ingredient data
+                // Log each ingredient separately if we found ingredient data (for chart data)
                 if (ingredientsWithDosage.length > 0) {
                   for (const ingredient of ingredientsWithDosage) {
                     const ingredientDosage = ingredient.mg * pillCount;
@@ -973,31 +1048,19 @@ export function SupplementTracker() {
                     }
                   }
                   
-                  console.log(`✅ Successfully logged all fetched ingredients for ${userSupplement.supplement.name}`);
+                  console.log(`✅ Successfully logged main entry + all fetched ingredients for ${userSupplement.supplement.name}`);
                 } else {
-                  // No ingredient data found, fall back to single entry
-                  const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
-                  const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
-                  console.log(`📊 No ingredient data found, logging as single entry: ${userSupplement.supplement?.name} = ${pillCount} pills`);
-                  await logSupplementUsage(userId, userSupplement.id, totalDosage);
+                  console.log(`ℹ️ No ingredient data found in DSLD response for ${userSupplement.supplement.name}`);
                 }
               } else {
                 throw new Error(`DSLD API response not ok: ${response.status}`);
               }
             } catch (error) {
               console.error(`Failed to fetch ingredient data for ${userSupplement.supplement.name}:`, error);
-              // Fall back to single entry logging
-              const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
-              const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
-              console.log(`📊 Fallback logging as single entry: ${userSupplement.supplement?.name} = ${pillCount} pills`);
-              await logSupplementUsage(userId, userSupplement.id, totalDosage);
+              console.log(`ℹ️ Fallback: Only main supplement entry logged (no individual ingredients)`);
             }
           } else {
-            // No dsld_id available, log as single entry
-            const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
-            const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
-            console.log(`📊 No DSLD ID available, logging as single entry: ${userSupplement.supplement?.name} = ${pillCount} pills`);
-            await logSupplementUsage(userId, userSupplement.id, totalDosage);
+            console.log(`ℹ️ No DSLD ID available for ${userSupplement.supplement?.name}, only main supplement entry logged`);
           }
         }
       } else {
@@ -1855,62 +1918,77 @@ export function SupplementTracker() {
                 </tr>
               </thead>
               <tbody>
-                {usageLog.map(u => (
-                  <tr key={u.id} className="border-t">
-                    {editingUsageId === u.id ? (
-                      <>
-                        <td className="px-2 py-1">
-                          <input
-                            type="datetime-local"
-                            className="p-1 border rounded text-xs"
-                            value={editedUsage.timestamp}
-                            onChange={e => handleUsageFieldChange('timestamp', e.target.value)}
-                            disabled={usageLoading}
-                          />
-                        </td>
-                        <td className="px-2 py-1">{u.user_supplement?.supplement?.name || '-'}</td>
-                        <td className="px-2 py-1">
-                          <div className="flex items-center gap-1">
+                {groupUsageLogEntries(usageLog).map(group => (
+                  <React.Fragment key={group.main.id}>
+                    {/* Main supplement entry */}
+                    <tr className="border-t">
+                      {editingUsageId === group.main.id ? (
+                        <>
+                          <td className="px-2 py-1">
                             <input
-                              type="number"
-                              className="w-16 p-1 border rounded text-xs text-center"
-                              value={editedUsage.dosage_mg}
-                              onChange={e => handleUsageFieldChange('dosage_mg', e.target.value)}
+                              type="datetime-local"
+                              className="p-1 border rounded text-xs"
+                              value={editedUsage.timestamp}
+                              onChange={e => handleUsageFieldChange('timestamp', e.target.value)}
                               disabled={usageLoading}
                             />
-                            <span className="text-xs text-gray-500">
-                              {(() => {
-                                // Get the unit for this supplement in usage log
-                                const isMultiIngredient = u.user_supplement?.supplement?._ingredientInfo?.isMultiIngredient ||
-                                                         (u.user_supplement?.supplement && isLikelyMultiIngredient(u.user_supplement.supplement));
-                                if (isMultiIngredient) return 'pills';
-                                
-                                const supplementName = u.user_supplement?.supplement?.name?.toLowerCase() || '';
-                                if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) return 'IU';
-                                if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) return 'IU';
-                                if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) return 'IU';
-                                return 'mg';
-                              })()}
-                            </span>
-                          </div>
+                          </td>
+                          <td className="px-2 py-1">{group.main.user_supplement?.supplement?.name || '-'}</td>
+                          <td className="px-2 py-1">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                className="w-16 p-1 border rounded text-xs text-center"
+                                value={editedUsage.dosage_mg}
+                                onChange={e => handleUsageFieldChange('dosage_mg', e.target.value)}
+                                disabled={usageLoading}
+                              />
+                              <span className="text-xs text-gray-500">
+                                {(() => {
+                                  // Get the unit for this supplement in usage log
+                                  const isMultiIngredient = group.main.user_supplement?.supplement?._ingredientInfo?.isMultiIngredient ||
+                                                           (group.main.user_supplement?.supplement && isLikelyMultiIngredient(group.main.user_supplement.supplement));
+                                  if (isMultiIngredient) return 'pills';
+                                  
+                                  const supplementName = group.main.user_supplement?.supplement?.name?.toLowerCase() || '';
+                                  if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) return 'IU';
+                                  if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) return 'IU';
+                                  if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) return 'IU';
+                                  return 'mg';
+                                })()}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-2 py-1 flex gap-1">
+                            <button className="p-1 bg-green-500 text-white rounded hover:bg-green-600" onClick={() => handleSaveUsage(group.main)} disabled={usageLoading}><Check size={14} /></button>
+                            <button className="p-1 bg-gray-300 text-gray-700 rounded hover:bg-gray-400" onClick={handleCancelEditUsage} disabled={usageLoading}><X size={14} /></button>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-2 py-1">{new Date(group.main.timestamp).toLocaleString()}</td>
+                          <td className="px-2 py-1">{group.main.user_supplement?.supplement?.name || '-'}</td>
+                          <td className="px-2 py-1">{getUsageLogDosageText(group.main)}</td>
+                          <td className="px-2 py-1 flex gap-1">
+                            <button className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600" onClick={() => handleEditUsage(group.main)} disabled={usageLoading}><Edit2 size={14} /></button>
+                            <button className="p-1 bg-red-500 text-white rounded hover:bg-red-600" onClick={() => handleDeleteUsage(group.main)} disabled={usageLoading}><Trash2 size={14} /></button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                    
+                    {/* Ingredient sub-entries */}
+                    {group.ingredients.map(ingredient => (
+                      <tr key={ingredient.id} className="border-t bg-blue-50">
+                        <td className="px-2 py-1 pl-8 text-gray-600">└─</td>
+                        <td className="px-2 py-1 text-gray-700 italic">{ingredient.user_supplement?.supplement?.name || '-'}</td>
+                        <td className="px-2 py-1 text-gray-700">{getUsageLogDosageText(ingredient)}</td>
+                        <td className="px-2 py-1">
+                          <span className="text-xs text-gray-500">ingredient</span>
                         </td>
-                        <td className="px-2 py-1 flex gap-1">
-                          <button className="p-1 bg-green-500 text-white rounded hover:bg-green-600" onClick={() => handleSaveUsage(u)} disabled={usageLoading}><Check size={14} /></button>
-                          <button className="p-1 bg-gray-300 text-gray-700 rounded hover:bg-gray-400" onClick={handleCancelEditUsage} disabled={usageLoading}><X size={14} /></button>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-2 py-1">{new Date(u.timestamp).toLocaleString()}</td>
-                        <td className="px-2 py-1">{u.user_supplement?.supplement?.name || '-'}</td>
-                        <td className="px-2 py-1">{getUsageLogDosageText(u)}</td>
-                        <td className="px-2 py-1 flex gap-1">
-                          <button className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600" onClick={() => handleEditUsage(u)} disabled={usageLoading}><Edit2 size={14} /></button>
-                          <button className="p-1 bg-red-500 text-white rounded hover:bg-red-600" onClick={() => handleDeleteUsage(u)} disabled={usageLoading}><Trash2 size={14} /></button>
-                        </td>
-                      </>
-                    )}
-                  </tr>
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
