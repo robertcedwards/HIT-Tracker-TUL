@@ -150,15 +150,22 @@ export function SupplementTracker() {
         // Try to extract serving size/dosage from various possible fields
         let defaultDosageMg = source.defaultDosageMg || source.default_dosage_mg;
         
+        // Debug product information
+        const debugProductName = source.fullName || source.productName || source.product_name || source.name;
+        console.log(`🔍 [SEARCH] Checking product: "${debugProductName}"`);
+        console.log(`🔍 [SEARCH] Available source keys:`, Object.keys(source));
+        console.log(`🔍 [SEARCH] Ingredient rows length:`, source.ingredientRows?.length || 0);
+        console.log(`🔍 [SEARCH] Has default dosage:`, !!defaultDosageMg);
+        
         // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
         if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
-          console.log(`🧪 Parsing ingredients for ${source.fullName || source.productName || source.name}:`, source.ingredientRows);
+          console.log(`🧪 Parsing ingredients for ${source.fullName || source.productName || source.name}:`, JSON.stringify(source.ingredientRows, null, 2));
           
           // Check if this is a single or multi-ingredient supplement
           const ingredientsWithDosage = [];
           
-          for (const ingredient of source.ingredientRows) {
-            console.log(`🔬 Processing ingredient:`, ingredient);
+                      for (const ingredient of source.ingredientRows) {
+              console.log(`🔬 Processing ingredient:`, JSON.stringify(ingredient, null, 2));
             
             if (ingredient.quantity && ingredient.quantity.length > 0) {
               for (const quantity of ingredient.quantity) {
@@ -215,7 +222,21 @@ export function SupplementTracker() {
           }
         }
         
-        // PRIORITY 2: Try to parse serving size if no explicit dosage (but avoid capsule counts)
+        // PRIORITY 2: Try to parse from product name if no ingredient-based dosage found
+        if (!defaultDosageMg) {
+          console.log(`🔍 [SEARCH] Trying product name parsing for: "${debugProductName}"`);
+          
+          // Look for dosage patterns in product name
+          const nameMatch = debugProductName.match(/(\d+(?:\.\d+)?)\s*mg/i);
+          if (nameMatch) {
+            defaultDosageMg = Math.round(parseFloat(nameMatch[1]));
+            console.log(`✅ [SEARCH] Extracted dosage from product name: ${defaultDosageMg}mg`);
+          } else {
+            console.log(`❌ [SEARCH] No dosage found in product name`);
+          }
+        }
+        
+        // PRIORITY 3: Try to parse serving size if no explicit dosage (but avoid capsule counts)
         if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
           const servingSize = source.servingSizes[0];
           if (servingSize.minQuantity) {
@@ -376,7 +397,22 @@ export function SupplementTracker() {
           }
         }
         
-        // PRIORITY 2: Try to parse serving size if no explicit dosage (but avoid capsule counts)
+        // PRIORITY 2: Try to parse from product name if no ingredient-based dosage found
+        if (!defaultDosageMg) {
+          const productName = source.fullName || source.productName || source.product_name || source.name;
+          console.log(`🔍 [BARCODE] Trying product name parsing for: "${productName}"`);
+          
+          // Look for dosage patterns in product name
+          const nameMatch = productName.match(/(\d+(?:\.\d+)?)\s*mg/i);
+          if (nameMatch) {
+            defaultDosageMg = Math.round(parseFloat(nameMatch[1]));
+            console.log(`✅ [BARCODE] Extracted dosage from product name: ${defaultDosageMg}mg`);
+          } else {
+            console.log(`❌ [BARCODE] No dosage found in product name`);
+          }
+        }
+        
+        // PRIORITY 3: Try to parse serving size if no explicit dosage (but avoid capsule counts)
         if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
           const servingSize = source.servingSizes[0];
           if (servingSize.minQuantity) {
