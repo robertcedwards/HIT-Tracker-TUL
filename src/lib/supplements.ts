@@ -1,25 +1,38 @@
 import { supabase } from './supabase';
 import { Supplement, UserSupplement, SupplementUsage } from '../types/Supplement';
+import { handleSupabaseOperation, logError } from './errorHandling';
 
 // --- Supplement (global/shared) ---
 export async function searchSupplements(keyword: string): Promise<Supplement[]> {
-  const { data, error } = await supabase
-    .from('supplements')
-    .select('*')
-    .ilike('name', `%${keyword}%`)
-    .limit(10);
-  if (error) throw error;
-  return data;
+  try {
+    const data = await handleSupabaseOperation(async () =>
+      supabase
+        .from('supplements')
+        .select('*')
+        .ilike('name', `%${keyword}%`)
+        .limit(10)
+    );
+    return data || [];
+  } catch (error) {
+    logError(error, 'searchSupplements');
+    throw error;
+  }
 }
 
 export async function addSupplement(supplement: Partial<Supplement>): Promise<Supplement> {
-  const { data, error } = await supabase
-    .from('supplements')
-    .insert(supplement)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+  try {
+    const data = await handleSupabaseOperation(async () =>
+      supabase
+        .from('supplements')
+        .insert(supplement)
+        .select()
+        .single()
+    );
+    return data!;
+  } catch (error) {
+    logError(error, 'addSupplement');
+    throw error;
+  }
 }
 
 export async function getSupplementById(id: string): Promise<Supplement | null> {
@@ -34,13 +47,19 @@ export async function getSupplementById(id: string): Promise<Supplement | null> 
 
 // --- User Supplement List ---
 export async function getUserSupplements(userId: string): Promise<UserSupplement[]> {
-  const { data, error } = await supabase
-    .from('user_supplements')
-    .select('*, supplement:supplement_id(*)')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data;
+  try {
+    const data = await handleSupabaseOperation(async () =>
+      supabase
+        .from('user_supplements')
+        .select('*, supplement:supplement_id(*)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+    );
+    return data || [];
+  } catch (error) {
+    logError(error, 'getUserSupplements');
+    throw error;
+  }
 }
 
 export async function addUserSupplement(userId: string, supplementId: string, custom_dosage_mg?: number, notes?: string): Promise<UserSupplement> {

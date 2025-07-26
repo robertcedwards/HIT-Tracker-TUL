@@ -8,6 +8,7 @@ import Quagga from 'quagga';
 import { Link, useNavigate } from 'react-router-dom';
 import { Dumbbell, User, LogOut } from 'lucide-react';
 import { SupplementInfoModal } from './SupplementInfoModal';
+import { handleDsldApiCall, getErrorMessage, logError } from '../lib/errorHandling';
 
 export function SupplementTracker() {
   const [search, setSearch] = useState('');
@@ -81,19 +82,17 @@ export function SupplementTracker() {
     setError(null);
     setSearchResults([]);
     setDsldResults([]);
+    
     try {
       // Local DB search
       const local = await searchSupplements(search);
       setSearchResults(local);
-      // DSLD search (proxy)
-      const res = await fetch(`/.netlify/functions/dsld-proxy?type=search&q=${encodeURIComponent(search)}`);
-      if (!res.ok) {
-        const text = await res.text();
-        setError(`DSLD API error: ${res.status} ${text}`);
-        setDsldResults([]);
-        return;
-      }
-      const data = await res.json();
+      
+      // DSLD search (proxy) with improved error handling
+      const data = await handleDsldApiCall<any>(() =>
+        fetch(`/.netlify/functions/dsld-proxy?type=search&q=${encodeURIComponent(search)}`)
+      );
+      
       let products: any[] = [];
       if (Array.isArray(data.products)) {
         products = data.products;
@@ -108,6 +107,7 @@ export function SupplementTracker() {
       } else if (data && data.labels && Array.isArray(data.labels)) {
         products = data.labels;
       }
+      
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
         // Try to extract image URL from possible fields
@@ -116,12 +116,15 @@ export function SupplementTracker() {
           dsldId: p._id || source.dsldId || source.dsld_id || source.id,
           productName: source.fullName || source.productName || source.product_name || source.name,
           brandName: source.brandName || source.brand_name || '',
-          defaultDosageMg: source.defaultDosageMg || undefined
-          , imageUrl
+          defaultDosageMg: source.defaultDosageMg || undefined,
+          imageUrl
         };
       }));
     } catch (e: any) {
-      setError('Failed to fetch from DSLD API: ' + (e?.message || e));
+      logError(e, 'handleSearch');
+      const userMessage = getErrorMessage(e);
+      setError(userMessage);
+      setDsldResults([]);
     } finally {
       setLoading(false);
     }
@@ -136,17 +139,14 @@ export function SupplementTracker() {
     setError(null);
     setSearchResults([]);
     setDsldResults([]);
+    
     try {
-      // DSLD search by barcode (quote-wrapped)
+      // DSLD search by barcode (quote-wrapped) with improved error handling
       const q = encodeURIComponent('"' + code.trim() + '"');
-      const res = await fetch(`/.netlify/functions/dsld-proxy?type=search&q=${q}`);
-      if (!res.ok) {
-        const text = await res.text();
-        setError(`DSLD API error: ${res.status} ${text}`);
-        setDsldResults([]);
-        return;
-      }
-      const data = await res.json();
+      const data = await handleDsldApiCall<any>(() =>
+        fetch(`/.netlify/functions/dsld-proxy?type=search&q=${q}`)
+      );
+      
       let products: any[] = [];
       if (Array.isArray(data.products)) {
         products = data.products;
@@ -161,6 +161,7 @@ export function SupplementTracker() {
       } else if (data && data.labels && Array.isArray(data.labels)) {
         products = data.labels;
       }
+      
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
         const imageUrl = source.imageUrl || source.image_url || source.productImage || source.product_image || source.image || undefined;
@@ -173,7 +174,9 @@ export function SupplementTracker() {
         };
       }));
     } catch (e: any) {
-      setError('Failed to fetch from DSLD API: ' + (e?.message || e));
+      logError(e, 'handleBarcodeSearch');
+      const userMessage = getErrorMessage(e);
+      setError(userMessage);
       setDsldResults([]);
     } finally {
       setLoading(false);
@@ -206,6 +209,10 @@ export function SupplementTracker() {
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
       setUserSupplements(updated);
+    } catch (e: any) {
+      logError(e, 'handleAddUserSupplement');
+      const userMessage = getErrorMessage(e);
+      setError(userMessage);
     } finally {
       setLoading(false);
     }
@@ -233,6 +240,10 @@ export function SupplementTracker() {
         imageUrl: dsld.imageUrl
       });
       await handleAddUserSupplement(supplement, customDosage);
+    } catch (e: any) {
+      logError(e, 'handleAddDsldSupplement');
+      const userMessage = getErrorMessage(e);
+      setError(userMessage);
     } finally {
       setLoading(false);
     }
@@ -266,6 +277,10 @@ export function SupplementTracker() {
       setCustomDosage('');
       setCustomAddMode(false);
       setSearch('');
+    } catch (e: any) {
+      logError(e, 'handleAddCustomSupplement');
+      const userMessage = getErrorMessage(e);
+      setError(userMessage);
     } finally {
       setLoading(false);
     }
