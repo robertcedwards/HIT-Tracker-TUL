@@ -25,6 +25,10 @@ export function SupplementTracker() {
   const [customAddMode, setCustomAddMode] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customBrand, setCustomBrand] = useState('');
+  const [isMultiIngredient, setIsMultiIngredient] = useState(false);
+  const [customIngredients, setCustomIngredients] = useState<Array<{name: string, dosage: string}>>([
+    { name: '', dosage: '' }
+  ]);
   const [editingDosage, setEditingDosage] = useState<Record<string, string>>({});
   const [dosageLoading, setDosageLoading] = useState<{ [userSupplementId: string]: boolean }>({});
   const [pillCounts, setPillCounts] = useState<{ [userSupplementId: string]: number }>({});
@@ -813,9 +817,35 @@ export function SupplementTracker() {
     }
   };
 
+  // Helper functions for custom ingredient management
+  const addCustomIngredient = () => {
+    setCustomIngredients([...customIngredients, { name: '', dosage: '' }]);
+  };
+
+  const removeCustomIngredient = (index: number) => {
+    if (customIngredients.length > 1) {
+      setCustomIngredients(customIngredients.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateCustomIngredient = (index: number, field: 'name' | 'dosage', value: string) => {
+    const updated = [...customIngredients];
+    updated[index][field] = value;
+    setCustomIngredients(updated);
+  };
+
   // Add custom supplement handler
   const handleAddCustomSupplement = async () => {
     if (!userId || !customName.trim()) return;
+    
+    // Validation for multi-ingredient supplements
+    if (isMultiIngredient) {
+      const validIngredients = customIngredients.filter(ing => ing.name.trim() && ing.dosage.trim());
+      if (validIngredients.length < 1) {
+        setError('Please add at least one ingredient with name and dosage.');
+        return;
+      }
+    }
     
     // Check for duplicates by name (case insensitive)
     const existingByName = userSupplements.find(us => 
@@ -828,17 +858,56 @@ export function SupplementTracker() {
     
     setLoading(true);
     try {
-      // Add to shared DB
-      const supplement = await addSupplement({
+      let supplementData: any = {
         name: customName.trim(),
         brand: customBrand.trim() || undefined,
-        default_dosage_mg: customDosage ? Number(customDosage) : undefined,
         created_by: userId
-      });
-      await handleAddUserSupplement(supplement, customDosage);
+      };
+
+      let ingredientInfo: any = undefined;
+
+      if (isMultiIngredient) {
+        // Process multi-ingredient supplement
+        const validIngredients = customIngredients
+          .filter(ing => ing.name.trim() && ing.dosage.trim())
+          .map(ing => ({
+            name: ing.name.trim(),
+            mg: parseFloat(ing.dosage)
+          }));
+
+        // Calculate total dosage
+        const totalMg = validIngredients.reduce((sum, ing) => sum + ing.mg, 0);
+        supplementData.default_dosage_mg = totalMg;
+
+        // Create ingredient info metadata
+        ingredientInfo = {
+          isMultiIngredient: true,
+          ingredients: validIngredients,
+          totalMg: totalMg
+        };
+
+        console.log(`🧬 Creating custom multi-ingredient supplement: ${customName.trim()}`, ingredientInfo);
+      } else {
+        // Single ingredient supplement
+        supplementData.default_dosage_mg = customDosage ? Number(customDosage) : undefined;
+      }
+
+      // Add to shared DB
+      const supplement = await addSupplement(supplementData);
+      
+      // Attach ingredient info metadata if multi-ingredient
+      if (ingredientInfo) {
+        supplement._ingredientInfo = ingredientInfo;
+      }
+
+      await handleAddUserSupplement(supplement, isMultiIngredient ? '1' : customDosage);
+      
+      // Clear form
       setCustomName('');
       setCustomBrand('');
       setCustomDosage('');
+      setIsMultiIngredient(false);
+      setCustomIngredients([{ name: '', dosage: '' }]);
       setCustomAddMode(false);
       setSearch('');
     } catch (e: any) {
@@ -1722,13 +1791,86 @@ export function SupplementTracker() {
                     value={customBrand}
                     onChange={e => setCustomBrand(e.target.value)}
                   />
-                  <input
-                    type="number"
-                    className="p-2 border rounded-lg"
-                    placeholder="Dosage (mg) - auto-filled from search results"
-                    value={customDosage}
-                    onChange={e => setCustomDosage(e.target.value)}
-                  />
+                  
+                  {/* Multi-ingredient toggle */}
+                  <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="multiIngredient"
+                      checked={isMultiIngredient}
+                      onChange={e => {
+                        setIsMultiIngredient(e.target.checked);
+                        if (!e.target.checked) {
+                          setCustomIngredients([{ name: '', dosage: '' }]);
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <label htmlFor="multiIngredient" className="text-sm font-medium">
+                      Multi-ingredient supplement (e.g., NAC + Glycine)
+                    </label>
+                  </div>
+
+                  {isMultiIngredient ? (
+                    /* Multi-ingredient mode */
+                    <div className="border rounded-lg p-3 bg-blue-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-blue-800">Individual Ingredients</span>
+                        <button
+                          type="button"
+                          onClick={addCustomIngredient}
+                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                        >
+                          <Plus size={12} className="inline mr-1" />
+                          Add Ingredient
+                        </button>
+                      </div>
+                      {customIngredients.map((ingredient, index) => (
+                        <div key={index} className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            className="flex-1 p-2 border rounded"
+                            placeholder={`Ingredient ${index + 1} name *`}
+                            value={ingredient.name}
+                            onChange={e => updateCustomIngredient(index, 'name', e.target.value)}
+                          />
+                          <input
+                            type="number"
+                            className="w-20 p-2 border rounded"
+                            placeholder="mg"
+                            value={ingredient.dosage}
+                            onChange={e => updateCustomIngredient(index, 'dosage', e.target.value)}
+                          />
+                          {customIngredients.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeCustomIngredient(index)}
+                              className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <div className="text-xs text-blue-600 mt-2">
+                        💡 Each ingredient will be tracked individually in charts. Total per pill: {
+                          customIngredients
+                            .filter(ing => ing.dosage.trim())
+                            .reduce((sum, ing) => sum + (parseFloat(ing.dosage) || 0), 0)
+                        }mg
+                      </div>
+                    </div>
+                  ) : (
+                    /* Single ingredient mode */
+                    <input
+                      type="number"
+                      className="p-2 border rounded-lg"
+                      placeholder="Dosage (mg)"
+                      value={customDosage}
+                      onChange={e => setCustomDosage(e.target.value)}
+                    />
+                  )}
+
                   {(searchResults.some(s => s.default_dosage_mg) || dsldResults.some(d => d.defaultDosageMg)) && (
                     <div className="text-xs text-blue-600 mt-1">
                       💡 Supplements with recommended dosages will use their default values. Use this field to override if needed.
