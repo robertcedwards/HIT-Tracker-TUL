@@ -872,14 +872,133 @@ export function SupplementTracker() {
           console.log(`✅ Successfully logged all ingredients for ${userSupplement.supplement.name}`);
         } else {
           // Multi-ingredient supplement detected but no ingredient data available
-          // Log as a single entry with note that it's a multi-ingredient supplement
-          const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
-          const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
-          console.log(`📊 Logging multi-ingredient supplement (no ingredient data): ${userSupplement.supplement?.name} = ${pillCount} pills`);
-          await logSupplementUsage(userId, userSupplement.id, totalDosage);
-          
-          // Note: To get individual ingredient logging, user should re-add this supplement from search
-          console.log(`ℹ️ To enable individual ingredient logging for ${userSupplement.supplement?.name}, remove and re-add it from the search results`);
+          // Try to fetch ingredient data from DSLD if dsld_id is available
+          if (userSupplement.supplement?.dsld_id) {
+            console.log(`🔍 Fetching ingredient data for ${userSupplement.supplement.name} from DSLD...`);
+            
+            try {
+              // Fetch ingredient data from DSLD API
+              const response = await fetch(
+                `/.netlify/functions/dsld-proxy?dsldId=${userSupplement.supplement.dsld_id}`
+              );
+              
+              if (response.ok) {
+                const data = await response.json();
+                console.log('🔍 DSLD API response for ingredient data:', data);
+                
+                // Extract ingredient information
+                const source = data._source || data;
+                const ingredientsWithDosage = [];
+                
+                if (source.ingredientRows && source.ingredientRows.length > 0) {
+                  for (const ingredient of source.ingredientRows) {
+                    if (ingredient.quantity && ingredient.quantity.length > 0) {
+                      for (const quantity of ingredient.quantity) {
+                        const quantityStr = String(quantity.quantity);
+                        
+                        // Extract mg dosages
+                        const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
+                        if (mgMatch) {
+                          ingredientsWithDosage.push({
+                            name: ingredient.name,
+                            mg: parseFloat(mgMatch[1])
+                          });
+                        }
+                        
+                        // Extract mcg dosages and convert to mg (1000mcg = 1mg)
+                        const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
+                        if (mcgMatch) {
+                          ingredientsWithDosage.push({
+                            name: ingredient.name,
+                            mg: parseFloat(mcgMatch[1]) / 1000
+                          });
+                        }
+                      }
+                    }
+                  }
+                }
+                
+                console.log(`🧬 Extracted ${ingredientsWithDosage.length} ingredients:`, ingredientsWithDosage);
+                
+                // Log each ingredient separately if we found ingredient data
+                if (ingredientsWithDosage.length > 0) {
+                  for (const ingredient of ingredientsWithDosage) {
+                    const ingredientDosage = ingredient.mg * pillCount;
+                    console.log(`📊 Logging fetched ingredient: ${ingredient.name} = ${ingredientDosage}mg (${ingredient.mg}mg × ${pillCount})`);
+                    
+                    try {
+                      // Create or find ingredient supplement
+                      let ingredientSupplement: Supplement;
+                      const existingIngredients = await searchSupplements(ingredient.name);
+                      const existingIngredient = existingIngredients.find(s => 
+                        s.name.toLowerCase() === ingredient.name.toLowerCase() && s.default_dosage_mg === ingredient.mg
+                      );
+                      
+                      if (existingIngredient) {
+                        ingredientSupplement = existingIngredient;
+                      } else {
+                        // Create new ingredient supplement
+                        ingredientSupplement = await addSupplement({
+                          name: ingredient.name,
+                          brand: userSupplement.supplement?.brand,
+                          default_dosage_mg: ingredient.mg,
+                          created_by: userId,
+                          dsld_id: null
+                        });
+                      }
+                      
+                      // Create user supplement entry for ingredient (if not exists)
+                      let ingredientUserSupplement: UserSupplement;
+                      const existingUserIngredients = await getUserSupplements(userId);
+                      const existingUserIngredient = existingUserIngredients.find(us => 
+                        us.supplement?.id === ingredientSupplement.id
+                      );
+                      
+                      if (existingUserIngredient) {
+                        ingredientUserSupplement = existingUserIngredient;
+                      } else {
+                        // Create user supplement for ingredient
+                        await addUserSupplement(userId, ingredientSupplement.id, ingredient.mg);
+                        const updatedUserSupplements = await getUserSupplements(userId);
+                        ingredientUserSupplement = updatedUserSupplements.find(us => 
+                          us.supplement?.id === ingredientSupplement.id
+                        )!;
+                      }
+                      
+                      // Log the ingredient usage
+                      await logSupplementUsage(userId, ingredientUserSupplement.id, ingredientDosage);
+                      
+                    } catch (error) {
+                      console.error(`Failed to log fetched ingredient ${ingredient.name}:`, error);
+                    }
+                  }
+                  
+                  console.log(`✅ Successfully logged all fetched ingredients for ${userSupplement.supplement.name}`);
+                } else {
+                  // No ingredient data found, fall back to single entry
+                  const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
+                  const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
+                  console.log(`📊 No ingredient data found, logging as single entry: ${userSupplement.supplement?.name} = ${pillCount} pills`);
+                  await logSupplementUsage(userId, userSupplement.id, totalDosage);
+                }
+              } else {
+                throw new Error(`DSLD API response not ok: ${response.status}`);
+              }
+            } catch (error) {
+              console.error(`Failed to fetch ingredient data for ${userSupplement.supplement.name}:`, error);
+              // Fall back to single entry logging
+              const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
+              const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
+              console.log(`📊 Fallback logging as single entry: ${userSupplement.supplement?.name} = ${pillCount} pills`);
+              await logSupplementUsage(userId, userSupplement.id, totalDosage);
+            }
+          } else {
+            // No dsld_id available, log as single entry
+            const dosage = userSupplement.custom_dosage_mg ?? userSupplement.supplement?.default_dosage_mg;
+            const totalDosage = typeof dosage === 'number' ? dosage * pillCount : undefined;
+            console.log(`📊 No DSLD ID available, logging as single entry: ${userSupplement.supplement?.name} = ${pillCount} pills`);
+            await logSupplementUsage(userId, userSupplement.id, totalDosage);
+          }
         }
       } else {
         // Single ingredient supplement - use existing logic
