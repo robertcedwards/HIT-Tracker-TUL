@@ -38,6 +38,37 @@ export function SupplementTracker() {
   const navigate = useNavigate();
   const [infoModal, setInfoModal] = useState<{ dsldId?: string; supplement?: Supplement | DsldProduct | null }>({});
 
+  // Auto-fill dosage input when search results change
+  useEffect(() => {
+    let defaultDosage: number | null = null;
+    
+    // Check search results first (Supplement type)
+    const searchResultWithDosage = searchResults.find(s => s.default_dosage_mg);
+    if (searchResultWithDosage) {
+      defaultDosage = searchResultWithDosage.default_dosage_mg!;
+    }
+    
+    // Then check DSLD results (DsldProduct type)
+    if (!defaultDosage) {
+      const dsldResultWithDosage = dsldResults.find(d => d.defaultDosageMg);
+      if (dsldResultWithDosage) {
+        defaultDosage = dsldResultWithDosage.defaultDosageMg!;
+      }
+    }
+    
+    // Auto-fill if we found a dosage and the field is empty
+    if (defaultDosage && !customDosage) {
+      console.log(`🔧 Auto-filling dosage field with: ${defaultDosage}mg`);
+      setCustomDosage(String(defaultDosage));
+    }
+    
+    // Clear dosage when no results
+    if (searchResults.length === 0 && dsldResults.length === 0 && customDosage) {
+      console.log(`🔧 Clearing dosage field - no search results`);
+      setCustomDosage('');
+    }
+  }, [searchResults, dsldResults]);
+
   useEffect(() => {
     // No-op for production
     return () => {};
@@ -93,6 +124,9 @@ export function SupplementTracker() {
         fetch(`/.netlify/functions/dsld-proxy?type=search&q=${encodeURIComponent(search)}`)
       );
       
+      // Debug: Log the raw API response
+      console.log('🔍 Raw DSLD API response:', data);
+      
       let products: any[] = [];
       if (Array.isArray(data.products)) {
         products = data.products;
@@ -108,15 +142,140 @@ export function SupplementTracker() {
         products = data.labels;
       }
       
+      console.log('🔍 Extracted products array:', products);
+      
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
+        
+        // Try to extract serving size/dosage from various possible fields
+        let defaultDosageMg = source.defaultDosageMg || source.default_dosage_mg;
+        
+        // Debug product information
+        const debugProductName = source.fullName || source.productName || source.product_name || source.name;
+        console.log(`🔍 [SEARCH] Checking product: "${debugProductName}"`);
+        console.log(`🔍 [SEARCH] Available source keys:`, Object.keys(source));
+        console.log(`🔍 [SEARCH] Ingredient rows length:`, source.ingredientRows?.length || 0);
+        console.log(`🔍 [SEARCH] Has default dosage:`, !!defaultDosageMg);
+        
+        // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
+        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          console.log(`🧪 Parsing ingredients for ${source.fullName || source.productName || source.name}:`, JSON.stringify(source.ingredientRows, null, 2));
+          
+          // Check if this is a single or multi-ingredient supplement
+          const ingredientsWithDosage = [];
+          
+                      for (const ingredient of source.ingredientRows) {
+              console.log(`🔬 Processing ingredient:`, JSON.stringify(ingredient, null, 2));
+            
+            if (ingredient.quantity && ingredient.quantity.length > 0) {
+              for (const quantity of ingredient.quantity) {
+                const quantityStr = String(quantity.quantity);
+                console.log(`🔬 Checking quantity string: "${quantityStr}"`);
+                
+                // Extract mg dosages
+                const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
+                if (mgMatch) {
+                  console.log(`✅ Found mg dosage: ${mgMatch[1]}mg for ${ingredient.name}`);
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mgMatch[1])
+                  });
+                }
+                
+                // Extract mcg dosages and convert to mg (1000mcg = 1mg)
+                const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
+                if (mcgMatch) {
+                  console.log(`✅ Found mcg dosage: ${mcgMatch[1]}mcg (${parseFloat(mcgMatch[1]) / 1000}mg) for ${ingredient.name}`);
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mcgMatch[1]) / 1000
+                  });
+                }
+              }
+            }
+          }
+          
+          console.log(`🔬 Total ingredients with dosage found:`, ingredientsWithDosage);
+          
+          if (ingredientsWithDosage.length > 0) {
+            if (ingredientsWithDosage.length === 1) {
+              // Single ingredient - use its dosage
+              defaultDosageMg = Math.round(ingredientsWithDosage[0].mg);
+              console.log(`✅ Single ingredient detected: ${defaultDosageMg}mg`);
+            } else {
+              // Multi-ingredient - sum all ingredients for total dose
+              const totalMg = ingredientsWithDosage.reduce((sum, ing) => sum + ing.mg, 0);
+              defaultDosageMg = Math.round(totalMg);
+              console.log(`✅ Multi-ingredient detected: ${defaultDosageMg}mg total from ${ingredientsWithDosage.length} ingredients`);
+            }
+            
+            // Add metadata to track ingredient info for search results
+            source._ingredientInfo = {
+              isMultiIngredient: ingredientsWithDosage.length > 1,
+              ingredients: ingredientsWithDosage,
+              totalMg: defaultDosageMg
+            };
+            
+            console.log(`✅ Set _ingredientInfo:`, source._ingredientInfo);
+          } else {
+            console.log(`❌ No ingredients with dosage found`);
+          }
+        }
+        
+        // PRIORITY 2: Try to parse from product name if no ingredient-based dosage found
+        if (!defaultDosageMg) {
+          console.log(`🔍 [SEARCH] Trying product name parsing for: "${debugProductName}"`);
+          
+          // Look for dosage patterns in product name
+          const nameMatch = debugProductName.match(/(\d+(?:\.\d+)?)\s*mg/i);
+          if (nameMatch) {
+            defaultDosageMg = Math.round(parseFloat(nameMatch[1]));
+            console.log(`✅ [SEARCH] Extracted dosage from product name: ${defaultDosageMg}mg`);
+          } else {
+            console.log(`❌ [SEARCH] No dosage found in product name`);
+          }
+        }
+        
+        // PRIORITY 3: Try to parse serving size if no explicit dosage (but avoid capsule counts)
+        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
+          const servingSize = source.servingSizes[0];
+          if (servingSize.minQuantity) {
+            // Look for dosage with "mg" specifically, avoid "capsule" 
+            const quantityStr = String(servingSize.minQuantity).toLowerCase();
+            if (quantityStr.includes('mg') && !quantityStr.includes('capsule')) {
+              const dosageMatch = quantityStr.match(/(\d+)\s*mg/i);
+              if (dosageMatch) {
+                defaultDosageMg = parseInt(dosageMatch[1]);
+              }
+            }
+          }
+        }
+        
         // Try to extract image URL from possible fields
         const imageUrl = source.imageUrl || source.image_url || source.productImage || source.product_image || source.image || undefined;
+        
+        // Debug logging for dosage extraction
+        const productName = source.fullName || source.productName || source.product_name || source.name;
+        console.log(`🔍 Dosage extraction for ${productName}:`, {
+          defaultDosageMg: defaultDosageMg,
+          hasServingSizes: !!source.servingSizes,
+          servingSizes: source.servingSizes,
+          hasIngredientRows: !!source.ingredientRows,
+          ingredientRows: source.ingredientRows,
+          allSourceKeys: Object.keys(source)
+        });
+        
+        if (defaultDosageMg) {
+          console.log(`✅ Search: Extracted dosage for ${productName}: ${defaultDosageMg}mg`);
+        } else {
+          console.log(`❌ Search: No dosage found for ${productName}`);
+        }
+        
         return {
           dsldId: p._id || source.dsldId || source.dsld_id || source.id,
           productName: source.fullName || source.productName || source.product_name || source.name,
           brandName: source.brandName || source.brand_name || '',
-          defaultDosageMg: source.defaultDosageMg || undefined,
+          defaultDosageMg: defaultDosageMg || undefined,
           imageUrl
         };
       }));
@@ -147,6 +306,9 @@ export function SupplementTracker() {
         fetch(`/.netlify/functions/dsld-proxy?type=search&q=${q}`)
       );
       
+      // Debug: Log the raw API response for barcode
+      console.log('🔍 Raw DSLD Barcode API response:', data);
+      
       let products: any[] = [];
       if (Array.isArray(data.products)) {
         products = data.products;
@@ -162,14 +324,133 @@ export function SupplementTracker() {
         products = data.labels;
       }
       
+      console.log('🔍 Extracted barcode products array:', products);
+      
       setDsldResults(products.map((p: any) => {
         const source = p._source || p;
+        
+        // Try to extract serving size/dosage from various possible fields
+        let defaultDosageMg = source.defaultDosageMg || source.default_dosage_mg;
+        
+        // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
+        if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
+          console.log(`🧪 [BARCODE] Parsing ingredients for ${source.fullName || source.productName || source.name}:`, source.ingredientRows);
+          
+          // Check if this is a single or multi-ingredient supplement
+          const ingredientsWithDosage = [];
+          
+          for (const ingredient of source.ingredientRows) {
+            console.log(`🔬 [BARCODE] Processing ingredient:`, ingredient);
+            
+            if (ingredient.quantity && ingredient.quantity.length > 0) {
+              for (const quantity of ingredient.quantity) {
+                const quantityStr = String(quantity.quantity);
+                console.log(`🔬 [BARCODE] Checking quantity string: "${quantityStr}"`);
+                
+                // Extract mg dosages
+                const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
+                if (mgMatch) {
+                  console.log(`✅ [BARCODE] Found mg dosage: ${mgMatch[1]}mg for ${ingredient.name}`);
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mgMatch[1])
+                  });
+                }
+                
+                // Extract mcg dosages and convert to mg (1000mcg = 1mg)
+                const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
+                if (mcgMatch) {
+                  console.log(`✅ [BARCODE] Found mcg dosage: ${mcgMatch[1]}mcg (${parseFloat(mcgMatch[1]) / 1000}mg) for ${ingredient.name}`);
+                  ingredientsWithDosage.push({
+                    name: ingredient.name,
+                    mg: parseFloat(mcgMatch[1]) / 1000
+                  });
+                }
+              }
+            }
+          }
+          
+          console.log(`🔬 [BARCODE] Total ingredients with dosage found:`, ingredientsWithDosage);
+          
+          if (ingredientsWithDosage.length > 0) {
+            if (ingredientsWithDosage.length === 1) {
+              // Single ingredient - use its dosage
+              defaultDosageMg = Math.round(ingredientsWithDosage[0].mg);
+              console.log(`✅ [BARCODE] Single ingredient detected: ${defaultDosageMg}mg`);
+            } else {
+              // Multi-ingredient - sum all ingredients for total dose
+              const totalMg = ingredientsWithDosage.reduce((sum, ing) => sum + ing.mg, 0);
+              defaultDosageMg = Math.round(totalMg);
+              console.log(`✅ [BARCODE] Multi-ingredient detected: ${defaultDosageMg}mg total from ${ingredientsWithDosage.length} ingredients`);
+            }
+            
+            // Add metadata to track ingredient info for barcode results
+            source._ingredientInfo = {
+              isMultiIngredient: ingredientsWithDosage.length > 1,
+              ingredients: ingredientsWithDosage,
+              totalMg: defaultDosageMg
+            };
+            
+            console.log(`✅ [BARCODE] Set _ingredientInfo:`, source._ingredientInfo);
+          } else {
+            console.log(`❌ [BARCODE] No ingredients with dosage found`);
+          }
+        }
+        
+        // PRIORITY 2: Try to parse from product name if no ingredient-based dosage found
+        if (!defaultDosageMg) {
+          const productName = source.fullName || source.productName || source.product_name || source.name;
+          console.log(`🔍 [BARCODE] Trying product name parsing for: "${productName}"`);
+          
+          // Look for dosage patterns in product name
+          const nameMatch = productName.match(/(\d+(?:\.\d+)?)\s*mg/i);
+          if (nameMatch) {
+            defaultDosageMg = Math.round(parseFloat(nameMatch[1]));
+            console.log(`✅ [BARCODE] Extracted dosage from product name: ${defaultDosageMg}mg`);
+          } else {
+            console.log(`❌ [BARCODE] No dosage found in product name`);
+          }
+        }
+        
+        // PRIORITY 3: Try to parse serving size if no explicit dosage (but avoid capsule counts)
+        if (!defaultDosageMg && source.servingSizes && source.servingSizes.length > 0) {
+          const servingSize = source.servingSizes[0];
+          if (servingSize.minQuantity) {
+            // Look for dosage with "mg" specifically, avoid "capsule" 
+            const quantityStr = String(servingSize.minQuantity).toLowerCase();
+            if (quantityStr.includes('mg') && !quantityStr.includes('capsule')) {
+              const dosageMatch = quantityStr.match(/(\d+)\s*mg/i);
+              if (dosageMatch) {
+                defaultDosageMg = parseInt(dosageMatch[1]);
+              }
+            }
+          }
+        }
+        
         const imageUrl = source.imageUrl || source.image_url || source.productImage || source.product_image || source.image || undefined;
+        
+        // Debug logging for dosage extraction
+        const productName = source.fullName || source.productName || source.product_name || source.name;
+        console.log(`🔍 Barcode dosage extraction for ${productName}:`, {
+          defaultDosageMg: defaultDosageMg,
+          hasServingSizes: !!source.servingSizes,
+          servingSizes: source.servingSizes,
+          hasIngredientRows: !!source.ingredientRows,
+          ingredientRows: source.ingredientRows,
+          allSourceKeys: Object.keys(source)
+        });
+        
+        if (defaultDosageMg) {
+          console.log(`✅ Barcode: Extracted dosage for ${productName}: ${defaultDosageMg}mg`);
+        } else {
+          console.log(`❌ Barcode: No dosage found for ${productName}`);
+        }
+        
         return {
           dsldId: p._id || source.dsldId || source.dsld_id || source.id,
           productName: source.fullName || source.productName || source.product_name || source.name,
           brandName: source.brandName || source.brand_name || '',
-          defaultDosageMg: source.defaultDosageMg || undefined,
+          defaultDosageMg: defaultDosageMg || undefined,
           imageUrl
         };
       }));
@@ -201,7 +482,7 @@ export function SupplementTracker() {
     setLoading(true);
     try {
       await addUserSupplement(userId, supplement.id, customDosage ? Number(customDosage) : undefined);
-      setCustomDosage('');
+      setCustomDosage(''); // Clear custom dosage after successful add
       setSearch(''); // Only clear after successful add
       setSearchResults([]);
       setDsldResults([]);
@@ -231,6 +512,14 @@ export function SupplementTracker() {
     
     setLoading(true);
     try {
+      // Debug logging for dosage auto-fill
+      console.log('Adding DSLD supplement:', {
+        name: dsld.productName,
+        apiDosage: dsld.defaultDosageMg,
+        customDosage: customDosage,
+        finalDosage: customDosage ? customDosage : (dsld.defaultDosageMg ? String(dsld.defaultDosageMg) : undefined)
+      });
+      
       // Add to shared DB
       const supplement = await addSupplement({
         dsld_id: dsld.dsldId,
@@ -558,6 +847,46 @@ export function SupplementTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCamera, videoRef.current]);
 
+  // Backfill missing dosages for existing supplements
+  const backfillMissingDosages = async () => {
+    if (!userId) return;
+    
+    const supplementsNeedingDosage = userSupplements.filter(us => 
+      !us.custom_dosage_mg && 
+      us.supplement?.default_dosage_mg && 
+      us.supplement.default_dosage_mg > 0
+    );
+    
+    if (supplementsNeedingDosage.length === 0) {
+      setError('No supplements found that need dosage backfill.');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      for (const userSupplement of supplementsNeedingDosage) {
+        if (userSupplement.supplement?.default_dosage_mg) {
+          await updateUserSupplementDosage(
+            userSupplement.id, 
+            userSupplement.supplement.default_dosage_mg
+          );
+        }
+      }
+      
+      // Refresh user supplements
+      const updated = await getUserSupplements(userId);
+      setUserSupplements(updated);
+      
+      setError(`✅ Updated ${supplementsNeedingDosage.length} supplements with missing dosages.`);
+    } catch (e: any) {
+      logError(e, 'backfillMissingDosages');
+      const userMessage = getErrorMessage(e);
+      setError(userMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Chart data: group by date, supplement
   // Build chart data: one object per date, each supplement as a key
   const supplementNames = Array.from(new Set(usageLog.map(u => u.user_supplement?.supplement?.name).filter((n): n is string => typeof n === 'string' && !!n)));
@@ -779,6 +1108,27 @@ export function SupplementTracker() {
                 {customAddMode ? 'Cancel' : 'Add Custom'}
               </button>
             </form>
+            
+            {/* Dosage override field for search results */}
+            {!loading && search && (searchResults.length > 0 || dsldResults.length > 0) && (
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Dosage Override:</label>
+                  <input
+                    type="number"
+                    className="w-24 p-1 border rounded text-center"
+                    placeholder="mg"
+                    value={customDosage}
+                    onChange={e => setCustomDosage(e.target.value)}
+                    min="0"
+                  />
+                  <span className="text-xs text-gray-600">
+                    Leave empty to use recommended dosages
+                  </span>
+                </div>
+              </div>
+            )}
+            
             {error && <div className="text-red-600 mb-2">{error}</div>}
             {loading && <div className="flex items-center gap-2 text-blue-600"><Loader2 className="animate-spin" size={18} /> Loading...</div>}
             {/* Results only after search */}
@@ -788,7 +1138,14 @@ export function SupplementTracker() {
                 {searchResults.map(s => (
                   <div key={s.id} className="flex items-center justify-between p-2 hover:bg-blue-50 rounded cursor-pointer">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{s.name}</span>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{s.name}</span>
+                        {s.default_dosage_mg && (
+                          <span className="text-xs text-green-600">
+                            Recommended: {s._ingredientInfo?.isMultiIngredient ? '1 pill' : `${s.default_dosage_mg}mg`}
+                          </span>
+                        )}
+                      </div>
                       {s.brand && <span className="ml-2 text-xs text-gray-400">({s.brand})</span>}
                       {/* Info button for custom/local supplements: only if dsldId exists */}
                       {typeof s.dsld_id === 'string' && s.dsld_id && (
@@ -800,9 +1157,21 @@ export function SupplementTracker() {
                     <button
                       className="flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
                       onMouseDown={e => e.preventDefault()}
-                      onClick={() => handleAddUserSupplement(s, customDosage)}
+                      onClick={() => {
+                        // Use custom dosage if specified, otherwise use supplement's default dosage
+                        const dosageToUse = customDosage 
+                          ? customDosage 
+                          : (s.default_dosage_mg ? String(s.default_dosage_mg) : undefined);
+                        handleAddUserSupplement(s, dosageToUse);
+                      }}
                     >
-                      <Plus size={14} /> Add
+                      <Plus size={14} /> Add {
+                        customDosage 
+                          ? `(${customDosage}mg)` 
+                          : (s.default_dosage_mg 
+                              ? (s._ingredientInfo?.isMultiIngredient ? '(1 pill)' : `(${s.default_dosage_mg}mg)`)
+                              : '')
+                      }
                     </button>
                   </div>
                 ))}
@@ -813,6 +1182,11 @@ export function SupplementTracker() {
                       <div className="flex items-center gap-2">
                         <div className="flex flex-col">
                           <span className="font-medium">{dsld.productName}</span>
+                          {dsld.defaultDosageMg && (
+                            <span className="text-xs text-green-600">
+                              Recommended: {dsld._ingredientInfo?.isMultiIngredient ? '1 pill' : `${dsld.defaultDosageMg}mg`}
+                            </span>
+                          )}
                         </div>
                         {dsld.brandName && <span className="ml-2 text-xs text-gray-400">({dsld.brandName})</span>}
                         {/* Info button for DSLD supplements */}
@@ -823,9 +1197,21 @@ export function SupplementTracker() {
                       <button
                         className="flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
                         onMouseDown={e => e.preventDefault()}
-                        onClick={() => handleAddDsldSupplement(dsld, customDosage)}
+                        onClick={() => {
+                          // Use custom dosage if specified, otherwise use API dosage
+                          const dosageToUse = customDosage 
+                            ? customDosage 
+                            : (dsld.defaultDosageMg ? String(dsld.defaultDosageMg) : undefined);
+                          handleAddDsldSupplement(dsld, dosageToUse);
+                        }}
                       >
-                        <Plus size={14} /> Add
+                        <Plus size={14} /> Add {
+                          customDosage 
+                            ? `(${customDosage}mg)` 
+                            : (dsld.defaultDosageMg 
+                                ? (dsld._ingredientInfo?.isMultiIngredient ? '(1 pill)' : `(${dsld.defaultDosageMg}mg)`)
+                                : '')
+                        }
                       </button>
                     </div>
                   );
@@ -855,10 +1241,15 @@ export function SupplementTracker() {
                   <input
                     type="number"
                     className="p-2 border rounded-lg"
-                    placeholder="Dosage (mg, optional)"
+                    placeholder="Dosage (mg) - auto-filled from search results"
                     value={customDosage}
                     onChange={e => setCustomDosage(e.target.value)}
                   />
+                  {(searchResults.some(s => s.default_dosage_mg) || dsldResults.some(d => d.defaultDosageMg)) && (
+                    <div className="text-xs text-blue-600 mt-1">
+                      💡 Supplements with recommended dosages will use their default values. Use this field to override if needed.
+                    </div>
+                  )}
                   <button
                     className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                     onClick={handleAddCustomSupplement}
@@ -874,7 +1265,19 @@ export function SupplementTracker() {
 
         {/* User supplement list */}
         <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4 text-center">My Supplements</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-center flex-1">My Supplements</h2>
+            {userSupplements.some(us => !us.custom_dosage_mg && us.supplement?.default_dosage_mg) && (
+              <button
+                onClick={backfillMissingDosages}
+                className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 disabled:opacity-50"
+                disabled={loading}
+                title="Auto-fill missing dosages from database"
+              >
+                Fix Dosages
+              </button>
+            )}
+          </div>
           <div className="bg-gray-50 rounded-xl p-4">
             {userSupplements.length === 0 && <div className="text-gray-400">No supplements added yet.</div>}
             <table className="w-full text-sm">
