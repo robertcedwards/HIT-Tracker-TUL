@@ -99,6 +99,28 @@ export function SupplementTracker() {
 
   // Helper function to determine appropriate dosage unit
   const getDosageDisplayText = (userSupplement: UserSupplement, editingValue?: string) => {
+    // Check if it's a multi-ingredient supplement first
+    const isMultiIngredient = userSupplement.supplement?._ingredientInfo?.isMultiIngredient || 
+                             (userSupplement.supplement && isLikelyMultiIngredient(userSupplement.supplement));
+    
+    if (isMultiIngredient) {
+      // For multi-ingredient supplements, always show as pill count
+      // Use custom_dosage_mg if it represents pill count, otherwise default to 1 pill
+      let pillCount = 1;
+      
+      if (editingValue !== undefined) {
+        pillCount = parseInt(editingValue) || 1;
+      } else if (userSupplement.custom_dosage_mg != null) {
+        // For multi-ingredient, custom_dosage_mg should represent pill count
+        // If it's a large number (likely total mg), default to 1 pill
+        const customValue = userSupplement.custom_dosage_mg;
+        pillCount = customValue > 50 ? 1 : customValue; // Assume values > 50 are mg, not pill count
+      }
+      
+      return pillCount === 1 ? '1 pill' : `${pillCount} pills`;
+    }
+
+    // For single-ingredient supplements, use normal dosage logic
     const dosageValue = editingValue !== undefined
       ? editingValue
       : userSupplement.custom_dosage_mg != null
@@ -108,44 +130,30 @@ export function SupplementTracker() {
           : '';
 
     if (!dosageValue || dosageValue === '0') {
-      // For multi-ingredient supplements without dosage, show "1 pill" as default
-      if (userSupplement.supplement && isLikelyMultiIngredient(userSupplement.supplement)) {
-        return '1 pill';
-      }
       return '-';
     }
 
-    // Check if it's a multi-ingredient supplement
-    const isMultiIngredient = userSupplement.supplement?._ingredientInfo?.isMultiIngredient || 
-                             (userSupplement.supplement && isLikelyMultiIngredient(userSupplement.supplement));
+    // Single-ingredient supplements: check for common units
+    const supplement = userSupplement.supplement;
+    const supplementName = supplement?.name?.toLowerCase() || '';
     
-    if (isMultiIngredient) {
-      // For multi-ingredient supplements, show as pills/tablets
-      const count = parseInt(dosageValue) || 1;
-      return count === 1 ? '1 pill' : `${count} pills`;
-    } else {
-      // For single-ingredient supplements, check for common units
-      const supplement = userSupplement.supplement;
-      const supplementName = supplement?.name?.toLowerCase() || '';
-      
-      // Check for vitamin D (often measured in IU)
-      if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) {
-        return `${dosageValue} IU`;
-      }
-      
-      // Check for vitamin E (often measured in IU)  
-      if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) {
-        return `${dosageValue} IU`;
-      }
-      
-      // Check for vitamin A (often measured in IU)
-      if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) {
-        return `${dosageValue} IU`;
-      }
-      
-      // Default to mg for most supplements
-      return `${dosageValue} mg`;
+    // Check for vitamin D (often measured in IU)
+    if (supplementName.includes('vitamin d') || supplementName.includes('vit d')) {
+      return `${dosageValue} IU`;
     }
+    
+    // Check for vitamin E (often measured in IU)  
+    if (supplementName.includes('vitamin e') || supplementName.includes('vit e')) {
+      return `${dosageValue} IU`;
+    }
+    
+    // Check for vitamin A (often measured in IU)
+    if (supplementName.includes('vitamin a') || supplementName.includes('vit a')) {
+      return `${dosageValue} IU`;
+    }
+    
+    // Default to mg for most supplements
+    return `${dosageValue} mg`;
   };
 
   // Helper function to check if supplement is an auto-created ingredient
@@ -1962,13 +1970,28 @@ export function SupplementTracker() {
                           value={
                             editingDosage[us.id] !== undefined
                               ? editingDosage[us.id]
-                              : us.custom_dosage_mg != null
-                                ? String(us.custom_dosage_mg)
-                                : us.supplement?.default_dosage_mg != null
-                                  ? String(us.supplement.default_dosage_mg)
-                                  : (us.supplement && isLikelyMultiIngredient(us.supplement))
-                                    ? '1'  // Default to 1 pill for multi-ingredient supplements
-                                    : ''
+                              : (() => {
+                                  // Check if multi-ingredient first
+                                  const isMultiIngredient = us.supplement?._ingredientInfo?.isMultiIngredient || 
+                                                           (us.supplement && isLikelyMultiIngredient(us.supplement));
+                                  
+                                  if (isMultiIngredient) {
+                                    // For multi-ingredient supplements, show pill count
+                                    if (us.custom_dosage_mg != null) {
+                                      // If it's a large number (likely total mg), default to 1 pill
+                                      return us.custom_dosage_mg > 50 ? '1' : String(us.custom_dosage_mg);
+                                    }
+                                    return '1'; // Default to 1 pill
+                                  } else {
+                                    // For single-ingredient supplements, show mg
+                                    if (us.custom_dosage_mg != null) {
+                                      return String(us.custom_dosage_mg);
+                                    } else if (us.supplement?.default_dosage_mg != null) {
+                                      return String(us.supplement.default_dosage_mg);
+                                    }
+                                    return '';
+                                  }
+                                })()
                           }
                           onChange={e => handleDosageChange(us.id, e.target.value)}
                           onBlur={() => handleDosageBlur(us)}
