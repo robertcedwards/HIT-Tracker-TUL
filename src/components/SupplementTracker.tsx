@@ -140,8 +140,20 @@ export function SupplementTracker() {
     
     // Auto-fill if we found a dosage and the field is empty
     if (defaultDosage && !customDosage) {
-      console.log(`🔧 Auto-filling dosage field with: ${defaultDosage}mg`);
-      setCustomDosage(String(defaultDosage));
+      // Check if this is a multi-ingredient supplement
+      const supplementWithInfo = searchResultWithDosage || dsldResults.find(d => d.defaultDosageMg);
+      const isMultiIngredient = supplementWithInfo?._ingredientInfo?.isMultiIngredient;
+      
+      if (isMultiIngredient) {
+        // For multi-ingredient supplements, show "1" (representing 1 pill)
+        // but store the total mg in the backend for logging
+        console.log(`🔧 Auto-filling dosage field with: 1 (multi-ingredient pill, total: ${defaultDosage}mg)`);
+        setCustomDosage('1');
+      } else {
+        // For single-ingredient supplements, show the actual dosage
+        console.log(`🔧 Auto-filling dosage field with: ${defaultDosage}mg`);
+        setCustomDosage(String(defaultDosage));
+      }
     }
     
     // Clear dosage when no results
@@ -563,7 +575,22 @@ export function SupplementTracker() {
     
     setLoading(true);
     try {
-      await addUserSupplement(userId, supplement.id, customDosage ? Number(customDosage) : undefined);
+      // For multi-ingredient supplements, convert pill count to total mg
+      let actualDosage: number | undefined;
+      if (customDosage) {
+        const isMultiIngredient = supplement._ingredientInfo?.isMultiIngredient;
+        if (isMultiIngredient && supplement.default_dosage_mg) {
+          // User entered pill count, convert to total mg
+          const pillCount = Number(customDosage);
+          actualDosage = supplement.default_dosage_mg * pillCount;
+          console.log(`🔧 Converting ${pillCount} pills to ${actualDosage}mg for multi-ingredient supplement`);
+        } else {
+          // Single ingredient or no default dosage, use as-is
+          actualDosage = Number(customDosage);
+        }
+      }
+      
+      await addUserSupplement(userId, supplement.id, actualDosage);
       setCustomDosage(''); // Clear custom dosage after successful add
       setSearch(''); // Only clear after successful add
       setSearchResults([]);
@@ -594,12 +621,22 @@ export function SupplementTracker() {
     
     setLoading(true);
     try {
+      // For multi-ingredient supplements, convert pill count to total mg
+      let processedCustomDosage = customDosage;
+      if (customDosage && dsld._ingredientInfo?.isMultiIngredient && dsld.defaultDosageMg) {
+        const pillCount = Number(customDosage);
+        const totalMg = dsld.defaultDosageMg * pillCount;
+        processedCustomDosage = String(totalMg);
+        console.log(`🔧 Converting ${pillCount} pills to ${totalMg}mg for DSLD multi-ingredient supplement`);
+      }
+      
       // Debug logging for dosage auto-fill
       console.log('Adding DSLD supplement:', {
         name: dsld.productName,
         apiDosage: dsld.defaultDosageMg,
-        customDosage: customDosage,
-        finalDosage: customDosage ? customDosage : (dsld.defaultDosageMg ? String(dsld.defaultDosageMg) : undefined)
+        userInput: customDosage,
+        isMultiIngredient: dsld._ingredientInfo?.isMultiIngredient,
+        finalDosage: processedCustomDosage || (dsld.defaultDosageMg ? String(dsld.defaultDosageMg) : undefined)
       });
       
       // Add to shared DB
@@ -610,7 +647,13 @@ export function SupplementTracker() {
         default_dosage_mg: dsld.defaultDosageMg,
         imageUrl: dsld.imageUrl
       });
-      await handleAddUserSupplement(supplement, customDosage);
+      
+      // Copy over the ingredient info metadata to the created supplement
+      if (dsld._ingredientInfo) {
+        supplement._ingredientInfo = dsld._ingredientInfo;
+      }
+      
+      await handleAddUserSupplement(supplement, processedCustomDosage);
     } catch (e: any) {
       logError(e, 'handleAddDsldSupplement');
       const userMessage = getErrorMessage(e);
