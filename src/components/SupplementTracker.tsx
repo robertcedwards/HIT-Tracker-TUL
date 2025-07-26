@@ -182,9 +182,21 @@ export function SupplementTracker() {
     }
   };
 
+  // Check for duplicates
+  const checkForDuplicate = (supplementId: string): boolean => {
+    return userSupplements.some(us => us.supplement?.id === supplementId);
+  };
+
   // Add supplement to user list
   const handleAddUserSupplement = async (supplement: Supplement, customDosage?: string) => {
     if (!userId) return;
+    
+    // Check for duplicates
+    if (checkForDuplicate(supplement.id)) {
+      setError(`"${supplement.name}" is already in your supplement list.`);
+      return;
+    }
+    
     setLoading(true);
     try {
       await addUserSupplement(userId, supplement.id, customDosage ? Number(customDosage) : undefined);
@@ -192,6 +204,7 @@ export function SupplementTracker() {
       setSearch(''); // Only clear after successful add
       setSearchResults([]);
       setDsldResults([]);
+      setError(null); // Clear any previous errors
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
       setUserSupplements(updated);
@@ -203,6 +216,14 @@ export function SupplementTracker() {
   // Add DSLD supplement to DB, then to user list
   const handleAddDsldSupplement = async (dsld: DsldProduct, customDosage?: string) => {
     if (!userId) return;
+    
+    // Check if this DSLD supplement is already in user's list by dsld_id
+    const existingByDsldId = userSupplements.find(us => us.supplement?.dsld_id === dsld.dsldId);
+    if (existingByDsldId) {
+      setError(`"${dsld.productName}" is already in your supplement list.`);
+      return;
+    }
+    
     setLoading(true);
     try {
       // Add to shared DB
@@ -222,6 +243,16 @@ export function SupplementTracker() {
   // Add custom supplement handler
   const handleAddCustomSupplement = async () => {
     if (!userId || !customName.trim()) return;
+    
+    // Check for duplicates by name (case insensitive)
+    const existingByName = userSupplements.find(us => 
+      us.supplement?.name.toLowerCase() === customName.trim().toLowerCase()
+    );
+    if (existingByName) {
+      setError(`"${customName.trim()}" is already in your supplement list.`);
+      return;
+    }
+    
     setLoading(true);
     try {
       // Add to shared DB
@@ -237,6 +268,40 @@ export function SupplementTracker() {
       setCustomDosage('');
       setCustomAddMode(false);
       setSearch('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Remove supplement from user list
+  const handleRemoveUserSupplement = async (userSupplement: UserSupplement) => {
+    if (!userId) return;
+    
+    const confirmRemove = window.confirm(
+      `Remove "${userSupplement.supplement?.name}" from your supplement list?`
+    );
+    if (!confirmRemove) return;
+    
+    setLoading(true);
+    setError(null); // Clear any previous errors
+    try {
+      // Delete from user_supplements table
+      const { error } = await supabase
+        .from('user_supplements')
+        .delete()
+        .eq('id', userSupplement.id);
+
+      if (error) throw error;
+
+      // Refresh user supplements
+      const updated = await getUserSupplements(userId);
+      setUserSupplements(updated);
+      
+      // Also refresh usage log to remove any orphaned entries
+      const updatedUsage = await getSupplementUsages(userId, 30);
+      setUsageLog(updatedUsage);
+    } catch (e: any) {
+      setError('Failed to remove supplement: ' + (e?.message || e));
     } finally {
       setLoading(false);
     }
@@ -530,7 +595,7 @@ export function SupplementTracker() {
     });
     return (
       <div className="mb-6">
-        <h3 className="text-base font-semibold mb-2">This Week's Consistency</h3>
+        <h3 className="text-base font-semibold mb-2 text-center">This Week's Consistency</h3>
         <div className="overflow-x-auto">
           <table className="text-xs">
             <thead>
@@ -564,11 +629,12 @@ export function SupplementTracker() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <div className="max-w-6xl mx-auto p-6">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-x-hidden">
+      <div className="max-w-6xl mx-auto p-6 overflow-x-hidden">
         <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-4">
+            {/* Logo and Title Row */}
+            <div className="flex items-center justify-center gap-3">
               <div className="p-2 bg-blue-100 rounded-xl">
                 <PillBottle className="w-8 h-8 text-blue-500" />
               </div>
@@ -576,33 +642,36 @@ export function SupplementTracker() {
                 Supplement Flow
               </h1>
             </div>
-            <div className="flex items-center gap-3">
+            
+            {/* Navigation Row */}
+            <div className="flex items-center justify-center gap-3 md:gap-4">
               <Link
                 to="/"
-                className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors text-sm"
               >
-                Exercise Tracking
+                <Dumbbell size={16} />
+                <span>Exercise</span>
               </Link>
               <Link
                 to="/profile"
-                className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors text-sm"
               >
-                <User size={20} />
-                Profile
+                <User size={16} />
+                <span>Profile</span>
               </Link>
               <button
                 onClick={async () => { await supabase.auth.signOut(); navigate('/'); }}
-                className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors text-sm"
               >
-                <LogOut size={20} />
-                Sign Out
+                <LogOut size={16} />
+                <span>Sign Out</span>
               </button>
             </div>
           </div>
         </div>
         {/* Search input and manual search button */}
         <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Add or Search Supplement</h2>
+          <h2 className="text-lg font-semibold mb-4 text-center">Add or Search Supplement</h2>
           <div className="bg-gray-50 rounded-xl p-4">
             {/* Barcode search UI */}
             <form onSubmit={handleBarcodeSearch} className="flex flex-col md:flex-row gap-2 mb-4">
@@ -611,7 +680,11 @@ export function SupplementTracker() {
                 className="w-full md:w-64 p-2 border rounded-lg"
                 placeholder="Scan or enter barcode (UPC/EAN)"
                 value={String(barcode ?? '')}
-                onChange={e => setBarcode(e.target.value)}
+                onChange={e => {
+                  setBarcode(e.target.value);
+                  // Clear error when user starts typing
+                  if (error) setError(null);
+                }}
                 disabled={loading}
               />
               <button
@@ -666,7 +739,11 @@ export function SupplementTracker() {
                 className="w-full p-2 border rounded-lg"
                 placeholder="Search for a supplement (e.g. Vitamin D, Creatine)"
                 value={String(search ?? '')}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => {
+                  setSearch(e.target.value);
+                  // Clear error when user starts typing
+                  if (error) setError(null);
+                }}
                 disabled={loading}
                 autoFocus
               />
@@ -680,7 +757,11 @@ export function SupplementTracker() {
               <button
                 type="button"
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                onClick={() => setCustomAddMode(m => !m)}
+                onClick={() => {
+                  setCustomAddMode(m => !m);
+                  // Clear error when switching modes
+                  if (error) setError(null);
+                }}
               >
                 {customAddMode ? 'Cancel' : 'Add Custom'}
               </button>
@@ -780,39 +861,70 @@ export function SupplementTracker() {
 
         {/* User supplement list */}
         <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">My Supplements</h2>
+          <h2 className="text-lg font-semibold mb-4 text-center">My Supplements</h2>
           <div className="bg-gray-50 rounded-xl p-4">
             {userSupplements.length === 0 && <div className="text-gray-400">No supplements added yet.</div>}
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-100">
                   <th className="px-2 py-1 text-left">Name</th>
-                  <th className="px-2 py-1 text-left">Brand</th>
-                  <th className="px-2 py-1 text-left">Dosage (mg)</th>
-                  <th className="px-2 py-1 text-left">Log</th>
+                  <th className="px-2 py-1 text-left hidden md:table-cell">Brand</th>
+                  <th className="px-2 py-1 text-left hidden md:table-cell">Dosage (mg)</th>
+                  <th className="px-2 py-1 text-center">Log</th>
                 </tr>
               </thead>
               <tbody>
                 {userSupplements.map(us => {
                   return (
                     <tr key={us.id} className="border-t">
-                      <td className="px-2 py-1 font-medium flex flex-col gap-0.5">
-                        <span className="flex items-center gap-1">
-                          {us.supplement?.name}
-                          {/* Info button for user supplement if dsld_id exists */}
-                          {typeof us.supplement?.dsld_id === 'string' && us.supplement?.dsld_id && (
-                            <button className="ml-1 p-1 text-blue-500 hover:text-blue-700" onClick={() => setInfoModal({ dsldId: us.supplement!.dsld_id as string, supplement: us.supplement })}>
-                              <Info size={14} />
+                      <td className="px-2 py-1 font-medium">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">{us.supplement?.name}</span>
+                            {/* Info button for user supplement if dsld_id exists */}
+                            {typeof us.supplement?.dsld_id === 'string' && us.supplement?.dsld_id && (
+                              <button className="ml-1 p-1 text-blue-500 hover:text-blue-700" onClick={() => setInfoModal({ dsldId: us.supplement!.dsld_id as string, supplement: us.supplement })}>
+                                <Info size={14} />
+                              </button>
+                            )}
+                            {/* Delete button next to info icon */}
+                            <button
+                              className="ml-1 p-1 text-red-500 hover:text-red-700 disabled:opacity-50"
+                              onClick={() => handleRemoveUserSupplement(us)}
+                              disabled={loading}
+                              title="Remove from my supplements"
+                            >
+                              <Trash2 size={14} />
                             </button>
-                          )}
-                        </span>
+                          </div>
+                          <div className="md:hidden">
+                            {/* Show brand below name on mobile */}
+                            {us.supplement?.brand && (
+                              <div className="text-xs text-gray-500">
+                                {us.supplement.brand}
+                              </div>
+                            )}
+                            {/* Show dosage info on mobile */}
+                            <div className="text-xs text-gray-500">
+                              {(
+                                editingDosage[us.id] !== undefined
+                                  ? editingDosage[us.id]
+                                  : us.custom_dosage_mg != null
+                                    ? String(us.custom_dosage_mg)
+                                    : us.supplement?.default_dosage_mg != null
+                                      ? String(us.supplement.default_dosage_mg)
+                                      : '0'
+                              )}mg
+                            </div>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-2 py-1">{us.supplement?.brand || '-'}</td>
-                    <td className="px-2 py-1">
+                      <td className="px-2 py-1 hidden md:table-cell">{us.supplement?.brand || '-'}</td>
+                    <td className="px-2 py-1 hidden md:table-cell">
                       <div className="flex items-center gap-2">
                         <input
                           type="number"
-                          className="w-20 p-1 border rounded text-center"
+                          className="w-16 md:w-20 p-1 border rounded text-center"
                           value={
                             editingDosage[us.id] !== undefined
                               ? editingDosage[us.id]
@@ -832,31 +944,71 @@ export function SupplementTracker() {
                       </div>
                     </td>
                     <td className="px-2 py-1">
-                      <div className="flex items-center gap-2">
-                        <button
-                          className="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                          onClick={() => handlePillCountChange(us.id, -1)}
-                          disabled={logLoading || (pillCounts[us.id] || 1) <= 1}
-                          tabIndex={-1}
-                        >
-                          -
-                        </button>
-                        <button
-                          className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                          onClick={() => handleLogUsage(us)}
-                          disabled={logLoading}
-                        >
-                          {logLoading ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />} Log
-                          <span className="ml-1">{pillCounts[us.id] || 1}</span>
-                        </button>
-                        <button
-                          className="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                          onClick={() => handlePillCountChange(us.id, 1)}
-                          disabled={logLoading}
-                          tabIndex={-1}
-                        >
-                          +
-                        </button>
+                      <div className="flex flex-col md:flex-row items-center gap-1 md:gap-2">
+                        {/* Mobile: Vertical stacked layout */}
+                        <div className="flex md:hidden flex-col items-center gap-1">
+                          <button
+                            className="w-8 h-8 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center justify-center"
+                            onClick={() => handlePillCountChange(us.id, 1)}
+                            disabled={logLoading}
+                            tabIndex={-1}
+                          >
+                            +
+                          </button>
+                          <button
+                            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 min-w-[3rem]"
+                            onClick={() => handleLogUsage(us)}
+                            disabled={logLoading}
+                          >
+                            {logLoading ? (
+                              <Loader2 className="animate-spin" size={14} />
+                            ) : (
+                              <span>{pillCounts[us.id] || 1}</span>
+                            )}
+                          </button>
+                          <button
+                            className="w-8 h-8 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center justify-center"
+                            onClick={() => handlePillCountChange(us.id, -1)}
+                            disabled={logLoading || (pillCounts[us.id] || 1) <= 1}
+                            tabIndex={-1}
+                          >
+                            -
+                          </button>
+                        </div>
+                        {/* Desktop: Horizontal layout */}
+                        <div className="hidden md:flex items-center gap-2">
+                          <button
+                            className="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                            onClick={() => handlePillCountChange(us.id, -1)}
+                            disabled={logLoading || (pillCounts[us.id] || 1) <= 1}
+                            tabIndex={-1}
+                          >
+                            -
+                          </button>
+                          <button
+                            className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 min-w-[3rem]"
+                            onClick={() => handleLogUsage(us)}
+                            disabled={logLoading}
+                          >
+                            {logLoading ? (
+                              <Loader2 className="animate-spin" size={14} />
+                            ) : (
+                              <>
+                                <Check size={14} />
+                                <span>Log</span>
+                                <span className="ml-1">{pillCounts[us.id] || 1}</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            className="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                            onClick={() => handlePillCountChange(us.id, 1)}
+                            disabled={logLoading}
+                            tabIndex={-1}
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -874,7 +1026,7 @@ export function SupplementTracker() {
 
         {/* Usage log table and chart */}
         <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Usage Log</h2>
+          <h2 className="text-lg font-semibold mb-4 text-center">Usage Log</h2>
           <div className="bg-gray-50 rounded-xl p-4">
             {usageLog.length === 0 && <div className="text-gray-400">No usage logged yet.</div>}
             <table className="w-full text-xs md:text-sm mb-4">

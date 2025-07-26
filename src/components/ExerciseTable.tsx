@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { useWeightUnit } from '../contexts/WeightUnitContext';
 import { trackEvent } from '../lib/analytics';
 import { SessionTable } from './SessionTable';
+import NoSleep from 'nosleep.js';
 
 interface ExerciseTableProps {
   exercises: Exercise[];
@@ -28,6 +29,7 @@ interface TimerSettings {
 export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps) {
   const { weightUnit, toggleWeightUnit, convertWeight, formatWeight } = useWeightUnit();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const noSleepRef = useRef<NoSleep | null>(null);
   
   const [timerState, setTimerState] = useState<TimerState>({
     isRunning: false,
@@ -88,10 +90,20 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
   const [editSessionValues, setEditSessionValues] = useState<{ weight: string; timeUnderLoad: string }>({ weight: '', timeUnderLoad: '' });
   const [mobileSessionsToShow, setMobileSessionsToShow] = useState(5);
 
-  // Initialize audio element with correct path
+  // Initialize audio element and NoSleep
   useEffect(() => {
     audioRef.current = new Audio('timer-beep.mp3');
     audioRef.current.load(); // Preload the audio
+    
+    // Initialize NoSleep
+    noSleepRef.current = new NoSleep();
+    
+    return () => {
+      // Cleanup: disable NoSleep if it's enabled
+      if (noSleepRef.current?.isEnabled) {
+        noSleepRef.current.disable();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -106,6 +118,13 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     });
     setWeights(newWeights);
   }, [exercises]);
+
+  // Cleanup NoSleep when timer stops
+  useEffect(() => {
+    if (!timerState.isRunning && noSleepRef.current?.isEnabled) {
+      noSleepRef.current.disable();
+    }
+  }, [timerState.isRunning]);
 
   useEffect(() => {
     if (newExerciseInputRef.current) {
@@ -154,12 +173,19 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
     };
   }, [timerState.isRunning, timerSettings, localExercises]);
 
-  const handleStartTimer = (exerciseName: string) => {
+  const handleStartTimer = async (exerciseName: string) => {
     if (timerState.isRunning && timerState.exerciseName === exerciseName) {
+      // Stop timer
       trackEvent('stop_timer', {
         exercise: exerciseName,
         duration: timerState.time
       });
+      
+      // Disable NoSleep when stopping timer
+      if (noSleepRef.current?.isEnabled) {
+        noSleepRef.current.disable();
+      }
+      
       const exercise = localExercises.find(e => e.name === exerciseName);
       if (!exercise) return;
 
@@ -187,7 +213,18 @@ export function ExerciseTable({ exercises, onSaveExercise }: ExerciseTableProps)
         exerciseName: null
       });
     } else {
+      // Start timer
       trackEvent('start_timer', { exercise: exerciseName });
+      
+      // Enable NoSleep when starting timer to prevent screen sleep
+      try {
+        if (noSleepRef.current && !noSleepRef.current.isEnabled) {
+          await noSleepRef.current.enable();
+        }
+      } catch (error) {
+        console.warn('Failed to enable NoSleep:', error);
+      }
+      
       setTimerState({
         isRunning: true,
         time: 0,

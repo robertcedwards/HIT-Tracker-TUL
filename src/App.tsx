@@ -1,7 +1,7 @@
 import './index.css'
 import { ExerciseTable } from './components/ExerciseTable'
 import { Exercise } from './types/Exercise'
-import { Dumbbell, Info as InfoIcon, LogOut, User } from 'lucide-react'
+import { Dumbbell, Info as InfoIcon, LogOut, User, PillBottle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { InfoModal } from './components/InfoModal'
 import { AuthComponent } from './components/Auth'
@@ -82,12 +82,13 @@ function App() {
           } />
           <Route path="/" element={
             session ? (
-              <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-                <div className="max-w-6xl mx-auto p-6">
+              <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-x-hidden">
+                <div className="max-w-6xl mx-auto p-6 overflow-x-hidden">
                   {/* Header */}
                   <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-6 mb-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-4">
+                      {/* Logo and Title Row */}
+                      <div className="flex items-center justify-center gap-3">
                         <div className="p-2 bg-blue-100 rounded-xl">
                           <Dumbbell className="w-8 h-8 text-blue-500" />
                         </div>
@@ -95,26 +96,29 @@ function App() {
                           Hit Flow
                         </h1>
                       </div>
-                      <div className="flex items-center gap-3">
+                      
+                      {/* Navigation Row */}
+                      <div className="flex items-center justify-center gap-3 md:gap-4">
                         <Link
                           to="/supplements"
-                          className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors text-sm"
                         >
-                          Supplements
+                          <PillBottle size={16} />
+                          <span>Supplements</span>
                         </Link>
                         <Link
                           to="/profile"
-                          className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors text-sm"
                         >
-                          <User size={20} />
-                          Profile
+                          <User size={16} />
+                          <span>Profile</span>
                         </Link>
                         <button
                           onClick={() => supabase.auth.signOut()}
-                          className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors"
+                          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors text-sm"
                         >
-                          <LogOut size={20} />
-                          Sign Out
+                          <LogOut size={16} />
+                          <span>Sign Out</span>
                         </button>
                       </div>
                     </div>
