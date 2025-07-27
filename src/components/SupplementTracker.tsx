@@ -241,11 +241,24 @@ export function SupplementTracker() {
             
             console.log(`🔍 Checking ingredient: ${ingredientName} against main: ${mainName}`);
             
-            // Simple heuristic: if ingredient name appears in main supplement name
-            if (mainName.includes(ingredientName) || ingredientName.includes(mainName.split(' ')[0])) {
+            // More precise matching: only group if ingredient name is actually part of the main supplement name
+            // Extract key words from main supplement name
+            const mainWords = mainName.split(/[\s&+]+/).filter(word => word.length > 2);
+            const ingredientWords = ingredientName.split(/[\s&+]+/).filter(word => word.length > 2);
+            
+            // Check if any ingredient word appears in main supplement name
+            const hasMatchingWord = ingredientWords.some(ingredientWord => 
+              mainWords.some(mainWord => 
+                mainWord.includes(ingredientWord) || ingredientWord.includes(mainWord)
+              )
+            );
+            
+            if (hasMatchingWord) {
               console.log(`✅ Found matching ingredient: ${ingredientName} for main: ${mainName}`);
               ingredientEntries.push(potentialIngredient);
               processed.add(potentialIngredient.id);
+            } else {
+              console.log(`❌ No match: ${ingredientName} for main: ${mainName}`);
             }
           }
         }
@@ -351,7 +364,8 @@ export function SupplementTracker() {
     
     if (isMultiIngredient) {
       // For multi-ingredient supplements, show as pills/tablets
-      const count = parseInt(String(dosageValue));
+      // If it's a large number (likely total mg), default to 1 pill
+      const count = dosageValue > 50 ? 1 : parseInt(String(dosageValue)) || 1;
       return count === 1 ? '1 pill' : `${count} pills`;
     } else {
       // For single-ingredient supplements, check for common units
