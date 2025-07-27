@@ -94,8 +94,10 @@ export function SupplementTracker() {
       /\+|\&|with|and/,
       // Complex names suggesting multiple ingredients
       /complex|blend|formula|stack|combo/,
+      // Multi patterns (general)
+      /multi/,
       // Specific known multi-ingredient supplements
-      /ala\+nac|b-complex|cal-mag|multi|vitamin.*c.*with/
+      /ala\+nac|b-complex|cal-mag|vitamin.*c.*with/
     ];
     
     for (const pattern of multiIngredientPatterns) {
@@ -556,8 +558,20 @@ export function SupplementTracker() {
   // Fetch user supplements
   useEffect(() => {
     if (!userId) return;
+    console.log('📥 Fetching user supplements for userId:', userId);
     getUserSupplements(userId).then(supplements => {
+      console.log('📥 Raw user supplements received:', supplements.map(s => ({
+        id: s.id,
+        name: s.supplement?.name,
+        dsld_id: s.supplement?.dsld_id,
+        hasIngredientInfo: !!s.supplement?._ingredientInfo
+      })));
       const mainSupplements = filterMainSupplements(supplements);
+      console.log('📥 Filtered main supplements:', mainSupplements.map(s => ({
+        id: s.id,
+        name: s.supplement?.name,
+        dsld_id: s.supplement?.dsld_id
+      })));
       setUserSupplements(mainSupplements);
     });
     getSupplementUsages(userId, 30).then(setUsageLog);
