@@ -210,68 +210,56 @@ export function SupplementTracker() {
     console.log('🔍 Grouping supplements with ingredients:', supplements.map(s => ({
       id: s.id,
       name: s.supplement?.name,
+      hasIngredientInfo: !!s.supplement?._ingredientInfo,
       isAutoCreated: s.supplement ? isAutoCreatedIngredient(s.supplement) : false
     })));
     
     const grouped: Array<{main: UserSupplement, ingredients: UserSupplement[]}> = [];
     const processed = new Set<string>();
     
-    // First pass: find main supplements
+    // Only show hierarchical display for supplements that have actual ingredient metadata
     for (const supplement of supplements) {
       if (processed.has(supplement.id)) continue;
       
-      const isMainSupplement = supplement.supplement && !isAutoCreatedIngredient(supplement.supplement);
+      // Check if this supplement has ingredient information
+      const hasIngredientInfo = supplement.supplement?._ingredientInfo?.ingredients && 
+                                supplement.supplement._ingredientInfo.ingredients.length > 0;
       
-      if (isMainSupplement) {
-        const mainEntry = supplement;
-        const ingredientEntries: UserSupplement[] = [];
+      if (hasIngredientInfo) {
+        console.log(`🔍 Found supplement with ingredient info: ${supplement.supplement?.name}`);
         
-        console.log(`🔍 Processing main supplement: ${mainEntry.supplement?.name}`);
-        
-        // Look for ingredient supplements that might be related
-        for (const potentialIngredient of supplements) {
-          if (processed.has(potentialIngredient.id)) continue;
-          if (potentialIngredient.id === mainEntry.id) continue;
-          
-          const ingredientSupplement = potentialIngredient.supplement;
-          if (ingredientSupplement && isAutoCreatedIngredient(ingredientSupplement)) {
-            // Check if this ingredient might be part of the main supplement
-            const mainName = mainEntry.supplement?.name?.toLowerCase() || '';
-            const ingredientName = ingredientSupplement.name.toLowerCase();
-            
-            console.log(`🔍 Checking ingredient: ${ingredientName} against main: ${mainName}`);
-            
-            // More precise matching: only group if ingredient name is actually part of the main supplement name
-            // Extract key words from main supplement name
-            const mainWords = mainName.split(/[\s&+]+/).filter(word => word.length > 2);
-            const ingredientWords = ingredientName.split(/[\s&+]+/).filter(word => word.length > 2);
-            
-            // Check if any ingredient word appears in main supplement name
-            const hasMatchingWord = ingredientWords.some(ingredientWord => 
-              mainWords.some(mainWord => 
-                mainWord.includes(ingredientWord) || ingredientWord.includes(mainWord)
-              )
-            );
-            
-            if (hasMatchingWord) {
-              console.log(`✅ Found matching ingredient: ${ingredientName} for main: ${mainName}`);
-              ingredientEntries.push(potentialIngredient);
-              processed.add(potentialIngredient.id);
-            } else {
-              console.log(`❌ No match: ${ingredientName} for main: ${mainName}`);
+        // Create ingredient entries from the metadata
+        const ingredientEntries: UserSupplement[] = supplement.supplement!._ingredientInfo!.ingredients.map(ingredient => {
+          // Create a mock UserSupplement object for display purposes
+          return {
+            id: `ingredient-${supplement.id}-${ingredient.name}`,
+            user_id: supplement.user_id,
+            supplement_id: supplement.supplement_id,
+            custom_dosage_mg: ingredient.mg,
+            created_at: supplement.created_at,
+            supplement: {
+              id: `ingredient-${ingredient.name}`,
+              name: ingredient.name,
+              brand: null,
+              default_dosage_mg: ingredient.mg,
+              created_by: null,
+              dsld_id: null,
+              _ingredientInfo: {
+                isMultiIngredient: false,
+                ingredients: [ingredient],
+                totalMg: ingredient.mg
+              }
             }
-          }
-        }
+          } as UserSupplement;
+        });
         
-        console.log(`📋 Grouped ${mainEntry.supplement?.name} with ${ingredientEntries.length} ingredients:`, ingredientEntries.map(i => i.supplement?.name));
-        grouped.push({ main: mainEntry, ingredients: ingredientEntries });
-        processed.add(mainEntry.id);
-      }
-    }
-    
-    // Second pass: add any remaining supplements as standalone
-    for (const supplement of supplements) {
-      if (!processed.has(supplement.id)) {
+        console.log(`📋 Created ${ingredientEntries.length} ingredient entries for ${supplement.supplement?.name}:`, 
+                   ingredientEntries.map(i => `${i.supplement?.name} (${i.supplement?.default_dosage_mg}mg)`));
+        
+        grouped.push({ main: supplement, ingredients: ingredientEntries });
+        processed.add(supplement.id);
+      } else {
+        // Regular supplement without ingredient info - show as standalone
         console.log(`📋 Adding standalone supplement: ${supplement.supplement?.name}`);
         grouped.push({ main: supplement, ingredients: [] });
         processed.add(supplement.id);
