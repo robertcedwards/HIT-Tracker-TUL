@@ -77,12 +77,16 @@ export function SupplementTracker() {
 
   // Helper function to detect if supplement is multi-ingredient (fallback for existing supplements)
   const isLikelyMultiIngredient = (supplement: Supplement): boolean => {
+    console.log(`🔍 Checking if "${supplement.name}" is multi-ingredient...`);
+    
     if (supplement._ingredientInfo?.isMultiIngredient) {
+      console.log(`   ✅ Has _ingredientInfo.isMultiIngredient = true`);
       return true;
     }
     
     // Fallback detection for existing supplements without metadata
     const name = supplement.name.toLowerCase();
+    console.log(`   🔍 Checking patterns against: "${name}"`);
     
     // Look for common multi-ingredient patterns
     const multiIngredientPatterns = [
@@ -94,7 +98,15 @@ export function SupplementTracker() {
       /ala\+nac|b-complex|cal-mag|multi|vitamin.*c.*with/
     ];
     
-    return multiIngredientPatterns.some(pattern => pattern.test(name));
+    for (const pattern of multiIngredientPatterns) {
+      if (pattern.test(name)) {
+        console.log(`   ✅ Matched pattern: ${pattern}`);
+        return true;
+      }
+    }
+    
+    console.log(`   ❌ No patterns matched - not detected as multi-ingredient`);
+    return false;
   };
 
   // Helper function to determine appropriate dosage unit
@@ -178,9 +190,14 @@ export function SupplementTracker() {
   const [supplementIngredients, setSupplementIngredients] = useState<Record<string, Array<{name: string, mg: number}>>>({});
 
   const groupSupplementsWithIngredients = (supplements: UserSupplement[]): Array<{main: UserSupplement, ingredients: UserSupplement[]}> => {
+    console.log('📋 Grouping supplements for display...');
+    console.log('📋 Available fetched ingredients:', supplementIngredients);
+    
     const grouped: Array<{main: UserSupplement, ingredients: UserSupplement[]}> = [];
     
     for (const supplement of supplements) {
+      console.log(`📋 Processing supplement: ${supplement.supplement?.name}`);
+      
       // Check if this supplement has ingredient information (either from metadata or fetched)
       const hasIngredientInfo = supplement.supplement?._ingredientInfo?.ingredients && 
                                 supplement.supplement._ingredientInfo.ingredients.length > 0;
@@ -189,7 +206,12 @@ export function SupplementTracker() {
                                    supplementIngredients[supplement.supplement.dsld_id] &&
                                    supplementIngredients[supplement.supplement.dsld_id].length > 0;
       
+      console.log(`   - Has ingredient info: ${hasIngredientInfo}`);
+      console.log(`   - Has fetched ingredients: ${hasFetchedIngredients}`);
+      console.log(`   - DSLD ID: ${supplement.supplement?.dsld_id}`);
+      
       if (hasIngredientInfo) {
+        console.log(`   ✅ Using existing metadata for ${supplement.supplement?.name}`);
         // Use existing metadata
         const ingredientEntries: UserSupplement[] = supplement.supplement!._ingredientInfo!.ingredients.map(ingredient => {
           return {
@@ -214,10 +236,14 @@ export function SupplementTracker() {
           } as UserSupplement;
         });
         
+        console.log(`   📋 Created ${ingredientEntries.length} ingredient entries from metadata`);
         grouped.push({ main: supplement, ingredients: ingredientEntries });
       } else if (hasFetchedIngredients) {
+        console.log(`   ✅ Using fetched ingredients for ${supplement.supplement?.name}`);
         // Use fetched ingredients from DSLD
         const ingredients = supplementIngredients[supplement.supplement!.dsld_id!];
+        console.log(`   📋 Fetched ingredients:`, ingredients);
+        
         const ingredientEntries: UserSupplement[] = ingredients.map(ingredient => {
           return {
             id: `ingredient-${supplement.id}-${ingredient.name}`,
@@ -241,12 +267,19 @@ export function SupplementTracker() {
           } as UserSupplement;
         });
         
+        console.log(`   📋 Created ${ingredientEntries.length} ingredient entries from fetched data`);
         grouped.push({ main: supplement, ingredients: ingredientEntries });
       } else {
+        console.log(`   ❌ No ingredient data for ${supplement.supplement?.name} - showing as standalone`);
         // Regular supplement without ingredient info - show as standalone
         grouped.push({ main: supplement, ingredients: [] });
       }
     }
+    
+    console.log('📋 Final grouped result:', grouped.map(g => ({
+      main: g.main.supplement?.name,
+      ingredientCount: g.ingredients.length
+    })));
     
     return grouped;
   };
@@ -254,35 +287,64 @@ export function SupplementTracker() {
   // Fetch ingredient data for DSLD supplements that don't have ingredient info
   useEffect(() => {
     const fetchSupplementIngredients = async () => {
+      console.log('🔍 Checking for supplements needing ingredient data...');
+      
       for (const userSupplement of userSupplements) {
         const supplement = userSupplement.supplement;
-        if (!supplement?.dsld_id) continue;
+        console.log(`🔍 Checking supplement: ${supplement?.name}`);
+        console.log(`   - Has dsld_id: ${!!supplement?.dsld_id} (${supplement?.dsld_id})`);
+        console.log(`   - Has _ingredientInfo: ${!!supplement?._ingredientInfo?.ingredients}`);
+        console.log(`   - Already fetched: ${supplement?.dsld_id ? !!supplementIngredients[supplement.dsld_id] : false}`);
+        console.log(`   - Is likely multi-ingredient: ${supplement ? isLikelyMultiIngredient(supplement) : false}`);
+        
+        if (!supplement?.dsld_id) {
+          console.log(`   ❌ Skipping ${supplement?.name} - no dsld_id`);
+          continue;
+        }
         
         // Skip if we already have ingredient info or already fetched
-        if (supplement._ingredientInfo?.ingredients || supplementIngredients[supplement.dsld_id]) continue;
+        if (supplement._ingredientInfo?.ingredients || supplementIngredients[supplement.dsld_id]) {
+          console.log(`   ❌ Skipping ${supplement.name} - already have ingredient data`);
+          continue;
+        }
         
         // Skip if it doesn't look like a multi-ingredient supplement
-        if (!isLikelyMultiIngredient(supplement)) continue;
+        if (!isLikelyMultiIngredient(supplement)) {
+          console.log(`   ❌ Skipping ${supplement.name} - not detected as multi-ingredient`);
+          continue;
+        }
+        
+        console.log(`   ✅ Fetching ingredient data for: ${supplement.name}`);
         
         try {
           const response = await fetch(
             `/.netlify/functions/dsld-proxy?dsldId=${supplement.dsld_id}`
           );
           
+          console.log(`   📡 DSLD API response status: ${response.status}`);
+          
           if (response.ok) {
             const data = await response.json();
+            console.log(`   📡 DSLD API response data:`, data);
+            
             const source = data._source || data;
             const ingredientsWithDosage: Array<{name: string, mg: number}> = [];
             
+            console.log(`   🧪 Processing ingredientRows:`, source.ingredientRows);
+            
             if (source.ingredientRows && source.ingredientRows.length > 0) {
               for (const ingredient of source.ingredientRows) {
+                console.log(`   🧪 Processing ingredient:`, ingredient);
+                
                 if (ingredient.quantity && ingredient.quantity.length > 0) {
                   for (const quantity of ingredient.quantity) {
                     const quantityStr = String(quantity.quantity);
+                    console.log(`   🧪 Processing quantity: "${quantityStr}"`);
                     
                     // Extract mg dosages
                     const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
                     if (mgMatch) {
+                      console.log(`   ✅ Found mg dosage: ${mgMatch[1]}mg for ${ingredient.name}`);
                       ingredientsWithDosage.push({
                         name: ingredient.name,
                         mg: parseFloat(mgMatch[1])
@@ -292,6 +354,7 @@ export function SupplementTracker() {
                     // Extract mcg dosages and convert to mg (1000mcg = 1mg)
                     const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
                     if (mcgMatch) {
+                      console.log(`   ✅ Found mcg dosage: ${mcgMatch[1]}mcg (${parseFloat(mcgMatch[1]) / 1000}mg) for ${ingredient.name}`);
                       ingredientsWithDosage.push({
                         name: ingredient.name,
                         mg: parseFloat(mcgMatch[1]) / 1000
@@ -302,15 +365,23 @@ export function SupplementTracker() {
               }
             }
             
+            console.log(`   🧪 Total ingredients found: ${ingredientsWithDosage.length}`);
+            console.log(`   🧪 Ingredients:`, ingredientsWithDosage);
+            
             if (ingredientsWithDosage.length > 1) {
+              console.log(`   ✅ Setting ingredient data for ${supplement.name}`);
               setSupplementIngredients(prev => ({
                 ...prev,
                 [supplement.dsld_id!]: ingredientsWithDosage
               }));
+            } else {
+              console.log(`   ❌ Not enough ingredients found (${ingredientsWithDosage.length}), not setting data`);
             }
+          } else {
+            console.log(`   ❌ DSLD API response not ok: ${response.status}`);
           }
         } catch (error) {
-          // Silently fail for individual supplements
+          console.error(`   ❌ Error fetching ingredient data for ${supplement.name}:`, error);
         }
       }
     };
