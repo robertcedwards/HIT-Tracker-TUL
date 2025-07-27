@@ -175,6 +175,12 @@ export function SupplementTracker() {
 
   // Helper function to group supplements with their ingredients for display
   const groupSupplementsWithIngredients = (supplements: UserSupplement[]): Array<{main: UserSupplement, ingredients: UserSupplement[]}> => {
+    console.log('🔍 Grouping supplements with ingredients:', supplements.map(s => ({
+      id: s.id,
+      name: s.supplement?.name,
+      isAutoCreated: s.supplement ? isAutoCreatedIngredient(s.supplement) : false
+    })));
+    
     const grouped: Array<{main: UserSupplement, ingredients: UserSupplement[]}> = [];
     const processed = new Set<string>();
     
@@ -188,6 +194,8 @@ export function SupplementTracker() {
         const mainEntry = supplement;
         const ingredientEntries: UserSupplement[] = [];
         
+        console.log(`🔍 Processing main supplement: ${mainEntry.supplement?.name}`);
+        
         // Look for ingredient supplements that might be related
         for (const potentialIngredient of supplements) {
           if (processed.has(potentialIngredient.id)) continue;
@@ -199,14 +207,18 @@ export function SupplementTracker() {
             const mainName = mainEntry.supplement?.name?.toLowerCase() || '';
             const ingredientName = ingredientSupplement.name.toLowerCase();
             
+            console.log(`🔍 Checking ingredient: ${ingredientName} against main: ${mainName}`);
+            
             // Simple heuristic: if ingredient name appears in main supplement name
             if (mainName.includes(ingredientName) || ingredientName.includes(mainName.split(' ')[0])) {
+              console.log(`✅ Found matching ingredient: ${ingredientName} for main: ${mainName}`);
               ingredientEntries.push(potentialIngredient);
               processed.add(potentialIngredient.id);
             }
           }
         }
         
+        console.log(`📋 Grouped ${mainEntry.supplement?.name} with ${ingredientEntries.length} ingredients:`, ingredientEntries.map(i => i.supplement?.name));
         grouped.push({ main: mainEntry, ingredients: ingredientEntries });
         processed.add(mainEntry.id);
       }
@@ -215,10 +227,16 @@ export function SupplementTracker() {
     // Second pass: add any remaining supplements as standalone
     for (const supplement of supplements) {
       if (!processed.has(supplement.id)) {
+        console.log(`📋 Adding standalone supplement: ${supplement.supplement?.name}`);
         grouped.push({ main: supplement, ingredients: [] });
         processed.add(supplement.id);
       }
     }
+    
+    console.log('📋 Final grouped supplements:', grouped.map(g => ({
+      main: g.main.supplement?.name,
+      ingredients: g.ingredients.map(i => i.supplement?.name)
+    })));
     
     return grouped;
   };
