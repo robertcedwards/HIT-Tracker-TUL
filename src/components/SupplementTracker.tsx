@@ -158,19 +158,51 @@ export function SupplementTracker() {
 
   // Helper function to check if supplement is an auto-created ingredient
   const isAutoCreatedIngredient = (supplement: Supplement): boolean => {
-    if (!supplement.created_by || supplement.dsld_id) return false;
+    // Check if it's an auto-created ingredient supplement
+    // These are supplements created automatically when logging multi-ingredient supplements
     
-    const simpleIngredientNames = [
-      'vitamin c', 'vitamin d', 'vitamin e', 'vitamin a', 'vitamin b', 
-      'n-acetyl-l-cysteine', 'bioflavonoids', 'black pepper extract',
-      'magnesium', 'calcium', 'zinc', 'iron', 'l-cysteine', 'l-tyrosine',
-      'alpha-lipoic acid', 'ala', 'nac'
+    // Method 1: Check if it has _ingredientInfo metadata indicating it's an ingredient
+    // (This would be set when creating individual ingredient supplements)
+    if (supplement._ingredientInfo && supplement._ingredientInfo.ingredients.length === 1) {
+      console.log(`🔍 ${supplement.name}: Detected as ingredient via _ingredientInfo (single ingredient)`);
+      return true;
+    }
+    
+    // Method 2: Check if it was created by the system (has created_by but no dsld_id)
+    if (supplement.created_by && !supplement.dsld_id) {
+      const simpleIngredientNames = [
+        'vitamin c', 'vitamin d', 'vitamin e', 'vitamin a', 'vitamin b', 
+        'n-acetyl-l-cysteine', 'bioflavonoids', 'black pepper extract',
+        'magnesium', 'calcium', 'zinc', 'iron', 'l-cysteine', 'l-tyrosine',
+        'alpha-lipoic acid', 'ala', 'nac', 'glycine', 'creatine', 'taurine'
+      ];
+      
+      const name = supplement.name.toLowerCase();
+      const isSimpleIngredient = simpleIngredientNames.some(ingredientName => 
+        name.includes(ingredientName) && name.length < 50
+      );
+      
+      if (isSimpleIngredient) {
+        console.log(`🔍 ${supplement.name}: Detected as ingredient via simple name match`);
+        return true;
+      }
+    }
+    
+    // Method 3: Check if the name suggests it's an individual ingredient
+    const name = supplement.name.toLowerCase();
+    const ingredientPatterns = [
+      /^\d+%?\s*(pure\s+)?(vitamin\s+)?[a-z]+/i,  // "100% Pure Vitamin C", "500mg NAC"
+      /^[a-z]+\s+\d+\s*mg/i,  // "NAC 500mg"
+      /^[a-z]+\s+\d+\s*iu/i,  // "Vitamin D 2000 IU"
     ];
     
-    const name = supplement.name.toLowerCase();
-    return simpleIngredientNames.some(ingredientName => 
-      name.includes(ingredientName) && name.length < 30
-    );
+    if (ingredientPatterns.some(pattern => pattern.test(name))) {
+      console.log(`🔍 ${supplement.name}: Detected as ingredient via pattern match`);
+      return true;
+    }
+    
+    console.log(`🔍 ${supplement.name}: NOT detected as ingredient`);
+    return false;
   };
 
   // Helper function to group supplements with their ingredients for display
