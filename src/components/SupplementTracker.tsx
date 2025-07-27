@@ -175,19 +175,50 @@ export function SupplementTracker() {
   };
 
   // Helper function to group supplements with their ingredients for display
+  const [supplementIngredients, setSupplementIngredients] = useState<Record<string, Array<{name: string, mg: number}>>>({});
+
   const groupSupplementsWithIngredients = (supplements: UserSupplement[]): Array<{main: UserSupplement, ingredients: UserSupplement[]}> => {
     const grouped: Array<{main: UserSupplement, ingredients: UserSupplement[]}> = [];
     
-    // Only show hierarchical display for supplements that have actual ingredient metadata
     for (const supplement of supplements) {
-      // Check if this supplement has ingredient information
+      // Check if this supplement has ingredient information (either from metadata or fetched)
       const hasIngredientInfo = supplement.supplement?._ingredientInfo?.ingredients && 
                                 supplement.supplement._ingredientInfo.ingredients.length > 0;
       
+      const hasFetchedIngredients = supplement.supplement?.dsld_id && 
+                                   supplementIngredients[supplement.supplement.dsld_id] &&
+                                   supplementIngredients[supplement.supplement.dsld_id].length > 0;
+      
       if (hasIngredientInfo) {
-        // Create ingredient entries from the metadata
+        // Use existing metadata
         const ingredientEntries: UserSupplement[] = supplement.supplement!._ingredientInfo!.ingredients.map(ingredient => {
-          // Create a mock UserSupplement object for display purposes
+          return {
+            id: `ingredient-${supplement.id}-${ingredient.name}`,
+            user_id: supplement.user_id,
+            supplement_id: supplement.supplement_id,
+            custom_dosage_mg: ingredient.mg,
+            created_at: supplement.created_at,
+            supplement: {
+              id: `ingredient-${ingredient.name}`,
+              name: ingredient.name,
+              brand: null,
+              default_dosage_mg: ingredient.mg,
+              created_by: null,
+              dsld_id: null,
+              _ingredientInfo: {
+                isMultiIngredient: false,
+                ingredients: [ingredient],
+                totalMg: ingredient.mg
+              }
+            }
+          } as UserSupplement;
+        });
+        
+        grouped.push({ main: supplement, ingredients: ingredientEntries });
+      } else if (hasFetchedIngredients) {
+        // Use fetched ingredients from DSLD
+        const ingredients = supplementIngredients[supplement.supplement!.dsld_id!];
+        const ingredientEntries: UserSupplement[] = ingredients.map(ingredient => {
           return {
             id: `ingredient-${supplement.id}-${ingredient.name}`,
             user_id: supplement.user_id,
@@ -219,6 +250,75 @@ export function SupplementTracker() {
     
     return grouped;
   };
+
+  // Fetch ingredient data for DSLD supplements that don't have ingredient info
+  useEffect(() => {
+    const fetchSupplementIngredients = async () => {
+      for (const userSupplement of userSupplements) {
+        const supplement = userSupplement.supplement;
+        if (!supplement?.dsld_id) continue;
+        
+        // Skip if we already have ingredient info or already fetched
+        if (supplement._ingredientInfo?.ingredients || supplementIngredients[supplement.dsld_id]) continue;
+        
+        // Skip if it doesn't look like a multi-ingredient supplement
+        if (!isLikelyMultiIngredient(supplement)) continue;
+        
+        try {
+          const response = await fetch(
+            `/.netlify/functions/dsld-proxy?dsldId=${supplement.dsld_id}`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            const source = data._source || data;
+            const ingredientsWithDosage: Array<{name: string, mg: number}> = [];
+            
+            if (source.ingredientRows && source.ingredientRows.length > 0) {
+              for (const ingredient of source.ingredientRows) {
+                if (ingredient.quantity && ingredient.quantity.length > 0) {
+                  for (const quantity of ingredient.quantity) {
+                    const quantityStr = String(quantity.quantity);
+                    
+                    // Extract mg dosages
+                    const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
+                    if (mgMatch) {
+                      ingredientsWithDosage.push({
+                        name: ingredient.name,
+                        mg: parseFloat(mgMatch[1])
+                      });
+                    }
+                    
+                    // Extract mcg dosages and convert to mg (1000mcg = 1mg)
+                    const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
+                    if (mcgMatch) {
+                      ingredientsWithDosage.push({
+                        name: ingredient.name,
+                        mg: parseFloat(mcgMatch[1]) / 1000
+                      });
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (ingredientsWithDosage.length > 1) {
+              setSupplementIngredients(prev => ({
+                ...prev,
+                [supplement.dsld_id!]: ingredientsWithDosage
+              }));
+            }
+          }
+        } catch (error) {
+          // Silently fail for individual supplements
+        }
+      }
+    };
+
+    if (userSupplements.length > 0) {
+      fetchSupplementIngredients();
+    }
+  }, [userSupplements, supplementIngredients]);
 
   // Helper function to group usage log entries for hierarchical display
   const groupUsageLogEntries = (usageLog: SupplementUsage[]): Array<{main: SupplementUsage, ingredients: SupplementUsage[]}> => {
@@ -435,7 +535,7 @@ export function SupplementTracker() {
         if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
           
           // Check if this is a single or multi-ingredient supplement
-          const ingredientsWithDosage = [];
+          const ingredientsWithDosage: Array<{name: string, mg: number}> = [];
           
                       for (const ingredient of source.ingredientRows) {
             if (ingredient.quantity && ingredient.quantity.length > 0) {
@@ -569,7 +669,7 @@ export function SupplementTracker() {
         // PRIORITY 1: Try to parse from ingredient rows (most accurate for dosage)
         if (!defaultDosageMg && source.ingredientRows && source.ingredientRows.length > 0) {
           // Check if this is a single or multi-ingredient supplement
-          const ingredientsWithDosage = [];
+          const ingredientsWithDosage: Array<{name: string, mg: number}> = [];
           
           for (const ingredient of source.ingredientRows) {
             if (ingredient.quantity && ingredient.quantity.length > 0) {
@@ -980,7 +1080,7 @@ export function SupplementTracker() {
                 
                 // Extract ingredient information
                 const source = data._source || data;
-                const ingredientsWithDosage = [];
+                const ingredientsWithDosage: Array<{name: string, mg: number}> = [];
                 
                 if (source.ingredientRows && source.ingredientRows.length > 0) {
                   for (const ingredient of source.ingredientRows) {
