@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { searchSupplements, addSupplement, getUserSupplements, addUserSupplement, logSupplementUsage, getSupplementUsages, updateUserSupplementDosage, updateSupplementUsage } from '../lib/supplements';
 import { Supplement, UserSupplement, SupplementUsage, DsldProduct } from '../types/Supplement';
 import { supabase } from '../lib/supabase';
-import { Plus, Check, Loader2, Edit2, Trash2, X, PillBottle, Info } from 'lucide-react';
+import { Plus, Check, Loader2, Edit2, Trash2, X, PillBottle, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Quagga from 'quagga';
 import { Link, useNavigate } from 'react-router-dom';
@@ -21,6 +21,7 @@ export function SupplementTracker() {
   const [logLoading, setLogLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [customAddMode, setCustomAddMode] = useState(false);
   const [customName, setCustomName] = useState('');
@@ -77,16 +78,12 @@ export function SupplementTracker() {
 
   // Helper function to detect if supplement is multi-ingredient (fallback for existing supplements)
   const isLikelyMultiIngredient = (supplement: Supplement): boolean => {
-    console.log(`🔍 Checking if "${supplement.name}" is multi-ingredient...`);
-    
     if (supplement._ingredientInfo?.isMultiIngredient) {
-      console.log(`   ✅ Has _ingredientInfo.isMultiIngredient = true`);
       return true;
     }
     
     // Fallback detection for existing supplements without metadata
     const name = supplement.name.toLowerCase();
-    console.log(`   🔍 Checking patterns against: "${name}"`);
     
     // Look for common multi-ingredient patterns
     const multiIngredientPatterns = [
@@ -102,12 +99,10 @@ export function SupplementTracker() {
     
     for (const pattern of multiIngredientPatterns) {
       if (pattern.test(name)) {
-        console.log(`   ✅ Matched pattern: ${pattern}`);
         return true;
       }
     }
     
-    console.log(`   ❌ No patterns matched - not detected as multi-ingredient`);
     return false;
   };
 
@@ -190,16 +185,57 @@ export function SupplementTracker() {
 
   // Helper function to group supplements with their ingredients for display
   const [supplementIngredients, setSupplementIngredients] = useState<Record<string, Array<{name: string, mg: number}>>>({});
+  
+  // State to track which multi-ingredient supplements are expanded in "My Supplements" table
+  const [expandedSupplements, setExpandedSupplements] = useState<Set<string>>(new Set());
+
+  // Helper function to toggle expanded state
+  const toggleExpandedSupplement = (supplementId: string) => {
+    setExpandedSupplements(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(supplementId)) {
+        newSet.delete(supplementId);
+      } else {
+        newSet.add(supplementId);
+      }
+      return newSet;
+    });
+  };
+
+  // Helper function to reconstruct ingredient info for custom supplements
+  const reconstructIngredientInfo = (supplements: UserSupplement[]): UserSupplement[] => {
+    return supplements.map(userSupplement => {
+      if (!userSupplement.supplement) return userSupplement;
+      
+      const supplement = userSupplement.supplement;
+      
+      // Skip if already has ingredient info or has DSLD ID (will be fetched separately)
+      if (supplement._ingredientInfo || supplement.dsld_id) {
+        return userSupplement;
+      }
+      
+      // Try to parse ingredient info from brand field (for custom multi-ingredient supplements)
+      if (supplement.brand) {
+        try {
+          const parsed = JSON.parse(supplement.brand);
+          if (parsed.ingredientInfo) {
+            supplement._ingredientInfo = parsed.ingredientInfo;
+            // Restore original brand
+            supplement.brand = parsed.originalBrand || null;
+          }
+        } catch (e) {
+          // Not JSON, keep as regular brand
+        }
+      }
+      
+      return userSupplement;
+    });
+  };
 
   const groupSupplementsWithIngredients = (supplements: UserSupplement[]): Array<{main: UserSupplement, ingredients: UserSupplement[]}> => {
-    console.log('📋 Grouping supplements for display...');
-    console.log('📋 Available fetched ingredients:', supplementIngredients);
-    
     const grouped: Array<{main: UserSupplement, ingredients: UserSupplement[]}> = [];
     
     for (const supplement of supplements) {
-      console.log(`📋 Processing supplement: ${supplement.supplement?.name}`);
-      
       // Check if this supplement has ingredient information (either from metadata or fetched)
       const hasIngredientInfo = supplement.supplement?._ingredientInfo?.ingredients && 
                                 supplement.supplement._ingredientInfo.ingredients.length > 0;
@@ -208,12 +244,7 @@ export function SupplementTracker() {
                                    supplementIngredients[supplement.supplement.dsld_id] &&
                                    supplementIngredients[supplement.supplement.dsld_id].length > 0;
       
-      console.log(`   - Has ingredient info: ${hasIngredientInfo}`);
-      console.log(`   - Has fetched ingredients: ${hasFetchedIngredients}`);
-      console.log(`   - DSLD ID: ${supplement.supplement?.dsld_id}`);
-      
       if (hasIngredientInfo) {
-        console.log(`   ✅ Using existing metadata for ${supplement.supplement?.name}`);
         // Use existing metadata
         const ingredientEntries: UserSupplement[] = supplement.supplement!._ingredientInfo!.ingredients.map(ingredient => {
           return {
@@ -238,13 +269,10 @@ export function SupplementTracker() {
           } as UserSupplement;
         });
         
-        console.log(`   📋 Created ${ingredientEntries.length} ingredient entries from metadata`);
         grouped.push({ main: supplement, ingredients: ingredientEntries });
       } else if (hasFetchedIngredients) {
-        console.log(`   ✅ Using fetched ingredients for ${supplement.supplement?.name}`);
         // Use fetched ingredients from DSLD
         const ingredients = supplementIngredients[supplement.supplement!.dsld_id!];
-        console.log(`   📋 Fetched ingredients:`, ingredients);
         
         const ingredientEntries: UserSupplement[] = ingredients.map(ingredient => {
           return {
@@ -269,121 +297,149 @@ export function SupplementTracker() {
           } as UserSupplement;
         });
         
-        console.log(`   📋 Created ${ingredientEntries.length} ingredient entries from fetched data`);
         grouped.push({ main: supplement, ingredients: ingredientEntries });
       } else {
-        console.log(`   ❌ No ingredient data for ${supplement.supplement?.name} - showing as standalone`);
         // Regular supplement without ingredient info - show as standalone
         grouped.push({ main: supplement, ingredients: [] });
       }
     }
     
-    console.log('📋 Final grouped result:', grouped.map(g => ({
-      main: g.main.supplement?.name,
-      ingredientCount: g.ingredients.length
-    })));
-    
     return grouped;
   };
+
+  // Auto-expand new multi-ingredient supplements
+  useEffect(() => {
+    // Find multi-ingredient supplements that aren't expanded yet
+    const grouped = groupSupplementsWithIngredients(userSupplements);
+    const multiIngredientSupplements = grouped.filter(g => g.ingredients.length > 0);
+    
+    multiIngredientSupplements.forEach(group => {
+      if (!expandedSupplements.has(group.main.id)) {
+        // Auto-expand supplements added in the last 5 seconds
+        const addedTime = new Date(group.main.created_at).getTime();
+        const now = Date.now();
+        if (now - addedTime < 5000) {
+          setExpandedSupplements(prev => new Set([...prev, group.main.id]));
+        }
+      }
+    });
+  }, [userSupplements]);
 
   // Fetch ingredient data for DSLD supplements that don't have ingredient info
   useEffect(() => {
     const fetchSupplementIngredients = async () => {
-      console.log('🔍 Checking for supplements needing ingredient data...');
-      
       for (const userSupplement of userSupplements) {
         const supplement = userSupplement.supplement;
-        console.log(`🔍 Checking supplement: ${supplement?.name}`);
-        console.log(`   - Has dsld_id: ${!!supplement?.dsld_id} (${supplement?.dsld_id})`);
-        console.log(`   - Has _ingredientInfo: ${!!supplement?._ingredientInfo?.ingredients}`);
-        console.log(`   - Already fetched: ${supplement?.dsld_id ? !!supplementIngredients[supplement.dsld_id] : false}`);
-        console.log(`   - Is likely multi-ingredient: ${supplement ? isLikelyMultiIngredient(supplement) : false}`);
         
         if (!supplement?.dsld_id) {
-          console.log(`   ❌ Skipping ${supplement?.name} - no dsld_id`);
           continue;
         }
         
         // Skip if we already have ingredient info or already fetched
         if (supplement._ingredientInfo?.ingredients || supplementIngredients[supplement.dsld_id]) {
-          console.log(`   ❌ Skipping ${supplement.name} - already have ingredient data`);
           continue;
         }
         
         // Skip if it doesn't look like a multi-ingredient supplement
         if (!isLikelyMultiIngredient(supplement)) {
-          console.log(`   ❌ Skipping ${supplement.name} - not detected as multi-ingredient`);
           continue;
         }
         
-        console.log(`   ✅ Fetching ingredient data for: ${supplement.name}`);
-        
         try {
           const response = await fetch(
-            `/.netlify/functions/dsld-proxy?dsldId=${supplement.dsld_id}`
+            `/.netlify/functions/dsld-proxy?type=label&dsldId=${supplement.dsld_id}`
           );
-          
-          console.log(`   📡 DSLD API response status: ${response.status}`);
           
           if (response.ok) {
             const data = await response.json();
-            console.log(`   📡 DSLD API response data:`, data);
             
             const source = data._source || data;
             const ingredientsWithDosage: Array<{name: string, mg: number}> = [];
             
-            console.log(`   🧪 Processing ingredientRows:`, source.ingredientRows);
             
             if (source.ingredientRows && source.ingredientRows.length > 0) {
               for (const ingredient of source.ingredientRows) {
-                console.log(`   🧪 Processing ingredient:`, ingredient);
-                
                 if (ingredient.quantity && ingredient.quantity.length > 0) {
                   for (const quantity of ingredient.quantity) {
-                    const quantityStr = String(quantity.quantity);
-                    console.log(`   🧪 Processing quantity: "${quantityStr}"`);
+                    const quantityStr = String(quantity.quantity || quantity);
                     
-                    // Extract mg dosages
+                    // Extract mg dosages (with unit)
                     const mgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mg/i);
                     if (mgMatch) {
-                      console.log(`   ✅ Found mg dosage: ${mgMatch[1]}mg for ${ingredient.name}`);
                       ingredientsWithDosage.push({
                         name: ingredient.name,
                         mg: parseFloat(mgMatch[1])
                       });
+                      continue;
                     }
                     
                     // Extract mcg dosages and convert to mg (1000mcg = 1mg)
                     const mcgMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*mcg/i);
                     if (mcgMatch) {
-                      console.log(`   ✅ Found mcg dosage: ${mcgMatch[1]}mcg (${parseFloat(mcgMatch[1]) / 1000}mg) for ${ingredient.name}`);
                       ingredientsWithDosage.push({
                         name: ingredient.name,
                         mg: parseFloat(mcgMatch[1]) / 1000
                       });
+                      continue;
+                    }
+                    
+                    // Extract IU dosages (for Vitamin E, D, A)
+                    const iuMatch = quantityStr.match(/(\d+(?:\.\d+)?)\s*iu/i);
+                    if (iuMatch) {
+                      // For IU, we'll store as mg equivalent for consistency
+                      // Common conversions: Vitamin D: 1mcg = 40IU, Vitamin E: 1mg = 1.49IU
+                      let mgEquivalent = parseFloat(iuMatch[1]);
+                      if (ingredient.name.toLowerCase().includes('vitamin d')) {
+                        mgEquivalent = parseFloat(iuMatch[1]) / 40 / 1000; // Convert to mg
+                      } else if (ingredient.name.toLowerCase().includes('vitamin e')) {
+                        mgEquivalent = parseFloat(iuMatch[1]) / 1.49;
+                      }
+                      ingredientsWithDosage.push({
+                        name: ingredient.name,
+                        mg: mgEquivalent
+                      });
+                      continue;
+                    }
+                    
+                    // Handle raw numbers (assume mg for most nutrients, mcg for B-vitamins)
+                    const numberMatch = quantityStr.match(/^(\d+(?:\.\d+)?)$/);
+                    if (numberMatch) {
+                      const value = parseFloat(numberMatch[1]);
+                      const name = ingredient.name.toLowerCase();
+                      
+                      // Vitamins typically measured in mcg
+                      const mcgVitamins = ['vitamin b12', 'b12', 'biotin', 'folate', 'folic acid', 'vitamin d', 'd3', 'vitamin k', 'vitamin a'];
+                      const isMcgVitamin = mcgVitamins.some(v => name.includes(v));
+                      
+                      if (isMcgVitamin && value < 1000) {
+                        // Small values for these vitamins are likely mcg
+                        ingredientsWithDosage.push({
+                          name: ingredient.name,
+                          mg: value / 1000 // Convert mcg to mg
+                        });
+                      } else {
+                        // Default to mg for most nutrients
+                        ingredientsWithDosage.push({
+                          name: ingredient.name,
+                          mg: value
+                        });
+                      }
+                      continue;
                     }
                   }
                 }
               }
             }
             
-            console.log(`   🧪 Total ingredients found: ${ingredientsWithDosage.length}`);
-            console.log(`   🧪 Ingredients:`, ingredientsWithDosage);
-            
             if (ingredientsWithDosage.length > 1) {
-              console.log(`   ✅ Setting ingredient data for ${supplement.name}`);
               setSupplementIngredients(prev => ({
                 ...prev,
                 [supplement.dsld_id!]: ingredientsWithDosage
               }));
-            } else {
-              console.log(`   ❌ Not enough ingredients found (${ingredientsWithDosage.length}), not setting data`);
             }
-          } else {
-            console.log(`   ❌ DSLD API response not ok: ${response.status}`);
           }
         } catch (error) {
-          console.error(`   ❌ Error fetching ingredient data for ${supplement.name}:`, error);
+          // Silently handle errors
         }
       }
     };
@@ -558,20 +614,9 @@ export function SupplementTracker() {
   // Fetch user supplements
   useEffect(() => {
     if (!userId) return;
-    console.log('📥 Fetching user supplements for userId:', userId);
     getUserSupplements(userId).then(supplements => {
-      console.log('📥 Raw user supplements received:', supplements.map(s => ({
-        id: s.id,
-        name: s.supplement?.name,
-        dsld_id: s.supplement?.dsld_id,
-        hasIngredientInfo: !!s.supplement?._ingredientInfo
-      })));
-      const mainSupplements = filterMainSupplements(supplements);
-      console.log('📥 Filtered main supplements:', mainSupplements.map(s => ({
-        id: s.id,
-        name: s.supplement?.name,
-        dsld_id: s.supplement?.dsld_id
-      })));
+      const reconstructed = reconstructIngredientInfo(supplements);
+      const mainSupplements = filterMainSupplements(reconstructed);
       setUserSupplements(mainSupplements);
     });
     getSupplementUsages(userId, 30).then(setUsageLog);
@@ -885,7 +930,8 @@ export function SupplementTracker() {
       setError(null); // Clear any previous errors
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
-      const mainSupplements = filterMainSupplements(updated);
+      const reconstructed = reconstructIngredientInfo(updated);
+      const mainSupplements = filterMainSupplements(reconstructed);
       setUserSupplements(mainSupplements);
     } catch (e: any) {
       logError(e, 'handleAddUserSupplement');
@@ -1016,6 +1062,14 @@ export function SupplementTracker() {
         supplementData.default_dosage_mg = customDosage ? Number(customDosage) : undefined;
       }
 
+      // For custom multi-ingredient supplements, store ingredient info in the brand field as JSON
+      if (isMultiIngredient && ingredientInfo) {
+        supplementData.brand = JSON.stringify({
+          originalBrand: customBrand.trim() || undefined,
+          ingredientInfo: ingredientInfo
+        });
+      }
+
       // Add to shared DB
       const supplement = await addSupplement(supplementData);
       
@@ -1025,6 +1079,15 @@ export function SupplementTracker() {
       }
 
       await handleAddUserSupplement(supplement, isMultiIngredient ? '1' : customDosage);
+      
+      // Show success message for multi-ingredient supplements
+      if (isMultiIngredient) {
+        setError(null);
+        // Show temporary success message
+        const successMsg = `✅ "${customName.trim()}" added! Look for the ▶️ button to expand ingredients.`;
+        setSuccessMessage(successMsg);
+        setTimeout(() => setSuccessMessage(null), 4000);
+      }
       
       // Clear form
       setCustomName('');
@@ -1065,7 +1128,8 @@ export function SupplementTracker() {
 
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
-      const mainSupplements = filterMainSupplements(updated);
+      const reconstructed = reconstructIngredientInfo(updated);
+      const mainSupplements = filterMainSupplements(reconstructed);
       setUserSupplements(mainSupplements);
       
       // Also refresh usage log to remove any orphaned entries
@@ -1157,7 +1221,7 @@ export function SupplementTracker() {
             try {
               // Fetch ingredient data from DSLD API
               const response = await fetch(
-                `/.netlify/functions/dsld-proxy?dsldId=${userSupplement.supplement.dsld_id}`
+                `/.netlify/functions/dsld-proxy?type=label&dsldId=${userSupplement.supplement.dsld_id}`
               );
               
               if (response.ok) {
@@ -1406,7 +1470,6 @@ export function SupplementTracker() {
       };
       
       if (!isValidBarcode(code, format)) {
-        console.log('Invalid barcode detected:', { code, format });
         return; // Ignore invalid codes
       }
       
@@ -1521,7 +1584,8 @@ export function SupplementTracker() {
       
       // Refresh user supplements
       const updated = await getUserSupplements(userId);
-      const mainSupplements = filterMainSupplements(updated);
+      const reconstructed = reconstructIngredientInfo(updated);
+      const mainSupplements = filterMainSupplements(reconstructed);
       setUserSupplements(mainSupplements);
       
       setError(`✅ Updated ${supplementsNeedingDosage.length} supplements with missing dosages.`);
@@ -1766,8 +1830,9 @@ export function SupplementTracker() {
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                 onClick={() => {
                   setCustomAddMode(m => !m);
-                  // Clear error when switching modes
+                  // Clear messages when switching modes
                   if (error) setError(null);
+                  if (successMessage) setSuccessMessage(null);
                 }}
               >
                 {customAddMode ? 'Cancel' : 'Add Custom'}
@@ -1795,6 +1860,7 @@ export function SupplementTracker() {
             )}
             
             {error && <div className="text-red-600 mb-2">{error}</div>}
+            {successMessage && <div className="text-green-600 mb-2 bg-green-50 p-2 rounded border border-green-200">{successMessage}</div>}
             {loading && <div className="flex items-center gap-2 text-blue-600"><Loader2 className="animate-spin" size={18} /> Loading...</div>}
             {/* Results only after search */}
             {!loading && search && (searchResults.length > 0 || dsldResults.length > 0) && (
@@ -1905,35 +1971,43 @@ export function SupplementTracker() {
                   />
                   
                   {/* Multi-ingredient toggle */}
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                    <input
-                      type="checkbox"
-                      id="multiIngredient"
-                      checked={isMultiIngredient}
-                      onChange={e => {
-                        setIsMultiIngredient(e.target.checked);
-                        if (!e.target.checked) {
-                          setCustomIngredients([{ name: '', dosage: '' }]);
-                        }
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <label htmlFor="multiIngredient" className="text-sm font-medium">
-                      Multi-ingredient supplement (e.g., NAC + Glycine)
-                    </label>
+                  <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="checkbox"
+                        id="multiIngredient"
+                        checked={isMultiIngredient}
+                        onChange={e => {
+                          setIsMultiIngredient(e.target.checked);
+                          if (!e.target.checked) {
+                            setCustomIngredients([{ name: '', dosage: '' }]);
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <label htmlFor="multiIngredient" className="text-sm font-semibold text-blue-800">
+                        🧪 Multi-ingredient supplement
+                      </label>
+                    </div>
+                    <div className="text-xs text-blue-600 ml-6">
+                      For combinations like "NAC + Glycine", "Magnesium + Zinc", etc.<br/>
+                      Each ingredient will be tracked individually in charts and logs.
+                    </div>
                   </div>
 
                   {isMultiIngredient ? (
                     /* Multi-ingredient mode */
-                    <div className="border rounded-lg p-3 bg-blue-50">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-blue-800">Individual Ingredients</span>
+                    <div className="border border-blue-300 rounded-lg p-4 bg-gradient-to-br from-blue-50 to-blue-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-semibold text-blue-800 flex items-center gap-1">
+                          ⚗️ Individual Ingredients
+                        </span>
                         <button
                           type="button"
                           onClick={addCustomIngredient}
-                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                          className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 shadow-sm flex items-center gap-1"
                         >
-                          <Plus size={12} className="inline mr-1" />
+                          <Plus size={12} />
                           Add Ingredient
                         </button>
                       </div>
@@ -2035,7 +2109,28 @@ export function SupplementTracker() {
                       <td className="px-2 py-1 font-medium">
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1">
+                            {/* Expand/Collapse button for multi-ingredient supplements */}
+                            {group.ingredients.length > 0 && (
+                              <button 
+                                className="p-1 text-gray-500 hover:text-gray-700"
+                                onClick={() => toggleExpandedSupplement(group.main.id)}
+                                title={expandedSupplements.has(group.main.id) ? "Collapse ingredients" : "Expand ingredients"}
+                              >
+                                {expandedSupplements.has(group.main.id) ? (
+                                  <ChevronDown size={14} />
+                                ) : (
+                                  <ChevronRight size={14} />
+                                )}
+                              </button>
+                            )}
+                            {group.ingredients.length === 0 && <div className="w-6"></div>}
                             <span className="font-medium">{group.main.supplement?.name}</span>
+                            {/* Show ingredient count for multi-ingredient supplements */}
+                            {group.ingredients.length > 0 && (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                {group.ingredients.length} ingredients
+                              </span>
+                            )}
                             {/* Info button for user supplement if dsld_id exists */}
                             {typeof group.main.supplement?.dsld_id === 'string' && group.main.supplement?.dsld_id && (
                               <button className="ml-1 p-1 text-blue-500 hover:text-blue-700" onClick={() => setInfoModal({ dsldId: group.main.supplement!.dsld_id as string, supplement: group.main.supplement })}>
@@ -2194,12 +2289,15 @@ export function SupplementTracker() {
                       </td>
                     </tr>
                     
-                    {/* Ingredient sub-entries */}
-                    {group.ingredients.map(ingredient => (
+                    {/* Ingredient sub-entries - only show when expanded */}
+                    {expandedSupplements.has(group.main.id) && group.ingredients.map(ingredient => (
                       <tr key={ingredient.id} className="border-t bg-blue-50">
-                        <td className="px-2 py-1 pl-8 text-gray-600">└─</td>
-                        <td className="px-2 py-1 text-gray-700 italic">{ingredient.supplement?.name || '-'}</td>
-                        <td className="px-2 py-1 text-gray-700">{getDosageDisplayText(ingredient)}</td>
+                        <td className="px-2 py-1 pl-8 text-gray-600">
+                          <span className="text-gray-600">└─ </span>
+                          <span className="text-gray-700 italic">{ingredient.supplement?.name || '-'}</span>
+                        </td>
+                        <td className="px-2 py-1 text-gray-700 hidden md:table-cell">{ingredient.supplement?.brand || '-'}</td>
+                        <td className="px-2 py-1 text-gray-700 hidden md:table-cell">{getDosageDisplayText(ingredient)}</td>
                         <td className="px-2 py-1">
                           <span className="text-xs text-gray-500">ingredient</span>
                         </td>
