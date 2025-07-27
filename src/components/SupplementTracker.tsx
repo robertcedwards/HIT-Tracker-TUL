@@ -168,110 +168,24 @@ export function SupplementTracker() {
       return true;
     }
     
-    // Method 2: Check if it was created by the system (has created_by but no dsld_id)
-    if (supplement.created_by && !supplement.dsld_id) {
-      const simpleIngredientNames = [
-        'vitamin c', 'vitamin d', 'vitamin e', 'vitamin a', 'vitamin b', 
-        'n-acetyl-l-cysteine', 'bioflavonoids', 'black pepper extract',
-        'magnesium', 'calcium', 'zinc', 'iron', 'l-cysteine', 'l-tyrosine',
-        'alpha-lipoic acid', 'ala', 'nac', 'glycine', 'creatine', 'taurine'
-      ];
-      
-      const name = supplement.name.toLowerCase();
-      const isSimpleIngredient = simpleIngredientNames.some(ingredientName => 
-        name.includes(ingredientName) && name.length < 50
-      );
-      
-      if (isSimpleIngredient) {
-        console.log(`🔍 ${supplement.name}: Detected as ingredient via simple name match`);
-        return true;
-      }
-    }
+    // Method 2: Only consider supplements as auto-created ingredients if they have specific metadata
+    // indicating they were created during the multi-ingredient logging process
+    // For now, be very conservative and only rely on metadata
     
-    // Method 3: Check if the name suggests it's an individual ingredient
-    const name = supplement.name.toLowerCase();
-    const ingredientPatterns = [
-      /^\d+%?\s*(pure\s+)?(vitamin\s+)?[a-z]+/i,  // "100% Pure Vitamin C", "500mg NAC"
-      /^[a-z]+\s+\d+\s*mg/i,  // "NAC 500mg"
-      /^[a-z]+\s+\d+\s*iu/i,  // "Vitamin D 2000 IU"
-    ];
-    
-    if (ingredientPatterns.some(pattern => pattern.test(name))) {
-      console.log(`🔍 ${supplement.name}: Detected as ingredient via pattern match`);
-      return true;
-    }
-    
-    console.log(`🔍 ${supplement.name}: NOT detected as ingredient`);
+    console.log(`🔍 ${supplement.name}: NOT detected as ingredient (no clear auto-creation markers)`);
     return false;
   };
 
-  // Helper function to group supplements with their ingredients for display
+  // Helper function to show supplements without grouping (for My Supplements table)
   const groupSupplementsWithIngredients = (supplements: UserSupplement[]): Array<{main: UserSupplement, ingredients: UserSupplement[]}> => {
-    console.log('🔍 Grouping supplements with ingredients:', supplements.map(s => ({
-      id: s.id,
-      name: s.supplement?.name,
-      hasIngredientInfo: !!s.supplement?._ingredientInfo,
-      isAutoCreated: s.supplement ? isAutoCreatedIngredient(s.supplement) : false
-    })));
+    console.log('🔍 My Supplements: Showing all supplements as standalone (no grouping)');
     
-    const grouped: Array<{main: UserSupplement, ingredients: UserSupplement[]}> = [];
-    const processed = new Set<string>();
-    
-    // Only show hierarchical display for supplements that have actual ingredient metadata
-    for (const supplement of supplements) {
-      if (processed.has(supplement.id)) continue;
-      
-      // Check if this supplement has ingredient information
-      const hasIngredientInfo = supplement.supplement?._ingredientInfo?.ingredients && 
-                                supplement.supplement._ingredientInfo.ingredients.length > 0;
-      
-      if (hasIngredientInfo) {
-        console.log(`🔍 Found supplement with ingredient info: ${supplement.supplement?.name}`);
-        
-        // Create ingredient entries from the metadata
-        const ingredientEntries: UserSupplement[] = supplement.supplement!._ingredientInfo!.ingredients.map(ingredient => {
-          // Create a mock UserSupplement object for display purposes
-          return {
-            id: `ingredient-${supplement.id}-${ingredient.name}`,
-            user_id: supplement.user_id,
-            supplement_id: supplement.supplement_id,
-            custom_dosage_mg: ingredient.mg,
-            created_at: supplement.created_at,
-            supplement: {
-              id: `ingredient-${ingredient.name}`,
-              name: ingredient.name,
-              brand: null,
-              default_dosage_mg: ingredient.mg,
-              created_by: null,
-              dsld_id: null,
-              _ingredientInfo: {
-                isMultiIngredient: false,
-                ingredients: [ingredient],
-                totalMg: ingredient.mg
-              }
-            }
-          } as UserSupplement;
-        });
-        
-        console.log(`📋 Created ${ingredientEntries.length} ingredient entries for ${supplement.supplement?.name}:`, 
-                   ingredientEntries.map(i => `${i.supplement?.name} (${i.supplement?.default_dosage_mg}mg)`));
-        
-        grouped.push({ main: supplement, ingredients: ingredientEntries });
-        processed.add(supplement.id);
-      } else {
-        // Regular supplement without ingredient info - show as standalone
-        console.log(`📋 Adding standalone supplement: ${supplement.supplement?.name}`);
-        grouped.push({ main: supplement, ingredients: [] });
-        processed.add(supplement.id);
-      }
-    }
-    
-    console.log('📋 Final grouped supplements:', grouped.map(g => ({
-      main: g.main.supplement?.name,
-      ingredients: g.ingredients.map(i => i.supplement?.name)
-    })));
-    
-    return grouped;
+    // For My Supplements table, just show all supplements as standalone
+    // No hierarchical grouping - that should only be in the Usage Log
+    return supplements.map(supplement => ({
+      main: supplement,
+      ingredients: [] // No ingredients in My Supplements table
+    }));
   };
 
   // Helper function to group usage log entries for hierarchical display
