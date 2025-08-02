@@ -72,7 +72,7 @@ export const handler = async (event: any, context: any) => {
     
     const requestHeaders = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${MOONDREAM_API_KEY}`,
+      'X-Moondream-Auth': `${MOONDREAM_API_KEY}`,
     };
     
     console.log('Actual request headers being sent:', requestHeaders);
