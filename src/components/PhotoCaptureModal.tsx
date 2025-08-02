@@ -277,23 +277,25 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                           </div>
                         </div>
                       )}
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        controls={false}
-                        className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
-                        style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
-                        onClick={() => {
-                          console.log('Video clicked, attempting to play...');
-                          if (videoRef.current && videoRef.current.paused) {
-                            videoRef.current.play().catch(err => {
-                              console.error('Error playing video on click:', err);
-                            });
-                          }
-                        }}
-                      />
+                      {!isCameraLoading && (
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          controls={false}
+                          className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
+                          style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
+                          onClick={() => {
+                            console.log('Video clicked, attempting to play...');
+                            if (videoRef.current && videoRef.current.paused) {
+                              videoRef.current.play().catch(err => {
+                                console.error('Error playing video on click:', err);
+                              });
+                            }
+                          }}
+                        />
+                      )}
                       {!isVideoPlaying && !isCameraLoading && (
                         <div className="absolute inset-0 bg-gray-100 rounded-lg border-2 border-blue-500 flex items-center justify-center">
                           <div className="text-center">
