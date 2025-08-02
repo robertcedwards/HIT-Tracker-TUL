@@ -307,23 +307,27 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                           Camera Active
                         </div>
                       )}
-                      <button
-                        onClick={capturePhoto}
-                        disabled={isCameraLoading}
-                        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white text-gray-800 rounded-lg shadow-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        📸 Capture Photo
-                      </button>
+                      {!isCameraLoading && (
+                        <button
+                          onClick={capturePhoto}
+                          disabled={isCameraLoading}
+                          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white text-gray-800 rounded-lg shadow-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          📸 Capture Photo
+                        </button>
+                      )}
                     </div>
-                    <button
-                      onClick={() => {
-                        stopCamera();
-                        setError(null);
-                      }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
-                    >
-                      Stop Camera
-                    </button>
+                    {!isCameraLoading && (
+                      <button
+                        onClick={() => {
+                          stopCamera();
+                          setError(null);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
+                      >
+                        Stop Camera
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
