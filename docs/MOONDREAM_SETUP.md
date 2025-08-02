@@ -41,19 +41,21 @@ VITE_MOONDREAM_API_KEY=your_moondream_api_key_here
 ## API Integration Details
 
 ### Moondream API Endpoint
+The integration uses the `/query` endpoint from the [Moondream API](https://moondream.ai/c/docs/advanced/api/query) for Visual Question Answering (VQA).
 The integration uses the Moondream API to extract supplement information from images. The API expects:
 
 **Request:**
 ```json
 {
-  "image": "base64_encoded_image",
-  "prompt": "Extract supplement information from this label..."
+  "image_url": "data:image/jpeg;base64,...",
+  "question": "Extract supplement information from this label..."
 }
 ```
 
 **Response:**
 ```json
 {
+  "request_id": "2025-03-25_query_2025-03-25-21:00:39-715d03",
   "answer": "{\"supplementName\": \"Vitamin D3\", \"brand\": \"Nature Made\", ...}"
 }
 ```

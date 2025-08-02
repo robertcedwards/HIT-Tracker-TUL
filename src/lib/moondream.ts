@@ -42,15 +42,15 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
     
     Only include fields that are clearly visible on the label. If a field is not present, omit it from the JSON.`;
 
-    const response = await fetch(`${MOONDREAM_API_URL}/answer`, {
+    const response = await fetch(`${MOONDREAM_API_URL}/query`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${MOONDREAM_API_KEY}`,
       },
       body: JSON.stringify({
-        image: base64Image,
-        prompt: prompt
+        image_url: `data:image/jpeg;base64,${base64Image}`,
+        question: prompt
       }),
     });
 
@@ -60,8 +60,8 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
 
     const data = await response.json();
     
-    // Moondream API returns the answer directly in the response
-    const answerText = data.answer || data.text || data.response || '';
+    // Moondream API returns the answer in the 'answer' field
+    const answerText = data.answer || '';
     
     // Parse the extracted JSON from the response
     let extractedData: Partial<MoondreamExtractionResult>;
@@ -80,7 +80,7 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       servingSize: extractedData.servingSize,
       servingsPerContainer: extractedData.servingsPerContainer,
       manufacturer: extractedData.manufacturer,
-      confidence: data.confidence || 0.5,
+      confidence: 0.8, // Default confidence since Moondream doesn't provide this
       rawText: answerText,
     };
 
