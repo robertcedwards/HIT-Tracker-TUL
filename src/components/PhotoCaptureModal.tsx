@@ -302,9 +302,11 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                           </div>
                         </div>
                       )}
-                      <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-xs">
-                        Camera Active
-                      </div>
+                      {!isCameraLoading && (
+                        <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-xs">
+                          Camera Active
+                        </div>
+                      )}
                       <button
                         onClick={capturePhoto}
                         disabled={isCameraLoading}
