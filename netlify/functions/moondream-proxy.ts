@@ -70,12 +70,16 @@ export const handler = async (event: any, context: any) => {
       'Authorization': `Bearer ${MOONDREAM_API_KEY ? '***' + MOONDREAM_API_KEY.substring(MOONDREAM_API_KEY.length - 4) : 'undefined'}`
     });
     
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${MOONDREAM_API_KEY}`,
+    };
+    
+    console.log('Actual request headers being sent:', requestHeaders);
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${MOONDREAM_API_KEY}`,
-      },
+      headers: requestHeaders,
       body: JSON.stringify({
         image_url,
         question,
