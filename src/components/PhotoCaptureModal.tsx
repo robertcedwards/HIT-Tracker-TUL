@@ -269,32 +269,30 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                 ) : (
                   <div className="space-y-2">
                     <div className="relative">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        controls={false}
+                        className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
+                        style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
+                        onClick={() => {
+                          console.log('Video clicked, attempting to play...');
+                          if (videoRef.current && videoRef.current.paused) {
+                            videoRef.current.play().catch(err => {
+                              console.error('Error playing video on click:', err);
+                            });
+                          }
+                        }}
+                      />
                       {isCameraLoading && (
-                        <div className="w-full h-64 bg-gray-100 rounded-lg border-2 border-blue-500 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-gray-100 rounded-lg border-2 border-blue-500 flex items-center justify-center">
                           <div className="text-center">
                             <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
                             <p className="text-gray-600 text-sm">Starting camera...</p>
                           </div>
                         </div>
-                      )}
-                      {!isCameraLoading && (
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          controls={false}
-                          className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
-                          style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
-                          onClick={() => {
-                            console.log('Video clicked, attempting to play...');
-                            if (videoRef.current && videoRef.current.paused) {
-                              videoRef.current.play().catch(err => {
-                                console.error('Error playing video on click:', err);
-                              });
-                            }
-                          }}
-                        />
                       )}
                       {!isVideoPlaying && !isCameraLoading && (
                         <div className="absolute inset-0 bg-gray-100 rounded-lg border-2 border-blue-500 flex items-center justify-center">
