@@ -40,6 +40,14 @@ export async function addSupplementWithThumbnail(
   thumbnailFile: File
 ): Promise<Supplement> {
   try {
+    // Debug: Log thumbnail file info
+    console.log('Thumbnail file info:', {
+      name: thumbnailFile.name,
+      size: thumbnailFile.size,
+      type: thumbnailFile.type,
+      sizeInMB: (thumbnailFile.size / (1024 * 1024)).toFixed(2)
+    });
+
     // Upload thumbnail to Supabase Storage
     const fileName = `supplement-thumbnails/${Date.now()}-${thumbnailFile.name}`;
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -48,7 +56,10 @@ export async function addSupplementWithThumbnail(
 
     if (uploadError) {
       console.error('Error uploading thumbnail:', uploadError);
-      throw new Error('Failed to upload thumbnail');
+      console.log('Continuing without thumbnail upload...');
+      
+      // Continue without thumbnail - just add the supplement
+      return await addSupplement(supplement);
     }
 
     // Get public URL for the uploaded thumbnail
