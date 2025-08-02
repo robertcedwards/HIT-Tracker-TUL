@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { searchSupplements, addSupplement, getUserSupplements, addUserSupplement, logSupplementUsage, getSupplementUsages, updateUserSupplementDosage, updateSupplementUsage } from '../lib/supplements';
+import { searchSupplements, addSupplement, getUserSupplements, addUserSupplement, logSupplementUsage, getSupplementUsages, updateUserSupplementDosage, updateSupplementUsage, addSupplementWithThumbnail } from '../lib/supplements';
 import { Supplement, UserSupplement, SupplementUsage, DsldProduct } from '../types/Supplement';
 import { supabase } from '../lib/supabase';
-import { Plus, Check, Loader2, Edit2, Trash2, X, PillBottle, Info, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Check, Loader2, Edit2, Trash2, X, PillBottle, Info, ChevronDown, ChevronRight, Camera } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Quagga from 'quagga';
 import { Link, useNavigate } from 'react-router-dom';
 import { Dumbbell, User, LogOut } from 'lucide-react';
 import { SupplementInfoModal } from './SupplementInfoModal';
+import { PhotoCaptureModal } from './PhotoCaptureModal';
+import { ExtractionPreviewModal } from './ExtractionPreviewModal';
 import { handleDsldApiCall, getErrorMessage, logError } from '../lib/errorHandling';
+import { MoondreamExtractionResult } from '../lib/moondream';
 
 export function SupplementTracker() {
   const [search, setSearch] = useState('');
@@ -42,6 +45,12 @@ export function SupplementTracker() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const navigate = useNavigate();
   const [infoModal, setInfoModal] = useState<{ dsldId?: string; supplement?: Supplement | DsldProduct | null }>({});
+  
+  // Photo capture and AI extraction states
+  const [showPhotoCapture, setShowPhotoCapture] = useState(false);
+  const [showExtractionPreview, setShowExtractionPreview] = useState(false);
+  const [extractionResult, setExtractionResult] = useState<MoondreamExtractionResult | null>(null);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
   // Helper function to filter out ingredient supplements from main list
   const filterMainSupplements = (supplements: UserSupplement[]): UserSupplement[] => {
@@ -1417,6 +1426,73 @@ export function SupplementTracker() {
     }
   };
 
+  // Photo capture and AI extraction handlers
+  const handlePhotoCaptureComplete = (result: MoondreamExtractionResult, thumbnail: File) => {
+    setExtractionResult(result);
+    setThumbnailFile(thumbnail);
+    setShowPhotoCapture(false);
+    setShowExtractionPreview(true);
+  };
+
+  const handleExtractionSave = async (editedData: MoondreamExtractionResult) => {
+    if (!userId || !thumbnailFile) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Convert dosage string to number if possible
+      let defaultDosageMg: number | undefined;
+      if (editedData.dosage) {
+        const dosageMatch = editedData.dosage.match(/(\d+(?:\.\d+)?)\s*(mg|mcg|g)/i);
+        if (dosageMatch) {
+          const value = parseFloat(dosageMatch[1]);
+          const unit = dosageMatch[2].toLowerCase();
+          if (unit === 'mg') {
+            defaultDosageMg = value;
+          } else if (unit === 'mcg') {
+            defaultDosageMg = value / 1000; // Convert mcg to mg
+          } else if (unit === 'g') {
+            defaultDosageMg = value * 1000; // Convert g to mg
+          }
+        }
+      }
+
+      // Create supplement object
+      const supplementData: Partial<Supplement> = {
+        name: editedData.supplementName,
+        brand: editedData.brand || null,
+        default_dosage_mg: defaultDosageMg || null,
+        created_by: userId,
+      };
+
+      // Add supplement with thumbnail
+      const newSupplement = await addSupplementWithThumbnail(supplementData, thumbnailFile);
+
+      // Add to user's supplement list
+      await addUserSupplement(userId, newSupplement.id);
+
+      // Refresh user supplements
+      const updatedSupplements = await getUserSupplements(userId);
+      setUserSupplements(updatedSupplements);
+
+      setSuccessMessage('Supplement added successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+
+      // Close modals and reset state
+      setShowExtractionPreview(false);
+      setExtractionResult(null);
+      setThumbnailFile(null);
+
+    } catch (error) {
+      console.error('Error saving extracted supplement:', error);
+      setError('Failed to save supplement. Please try again.');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Camera scan logic
   const startCameraScan = () => {
     setCameraError(null);
@@ -1836,6 +1912,15 @@ export function SupplementTracker() {
                 }}
               >
                 {customAddMode ? 'Cancel' : 'Add Custom'}
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2"
+                onClick={() => setShowPhotoCapture(true)}
+                disabled={loading}
+              >
+                <Camera size={16} />
+                Photo Capture
               </button>
             </form>
             
@@ -2435,6 +2520,28 @@ export function SupplementTracker() {
             dsldId={infoModal.dsldId}
             open={!!infoModal.dsldId}
             onClose={() => setInfoModal({})}
+          />
+        )}
+
+        {/* Photo Capture Modal */}
+        <PhotoCaptureModal
+          isOpen={showPhotoCapture}
+          onClose={() => setShowPhotoCapture(false)}
+          onExtractionComplete={handlePhotoCaptureComplete}
+        />
+
+        {/* Extraction Preview Modal */}
+        {extractionResult && thumbnailFile && (
+          <ExtractionPreviewModal
+            isOpen={showExtractionPreview}
+            onClose={() => {
+              setShowExtractionPreview(false);
+              setExtractionResult(null);
+              setThumbnailFile(null);
+            }}
+            extractionResult={extractionResult}
+            thumbnailFile={thumbnailFile}
+            onSave={handleExtractionSave}
           />
         )}
 

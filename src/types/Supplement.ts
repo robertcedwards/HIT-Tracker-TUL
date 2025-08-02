@@ -6,6 +6,7 @@ export type Supplement = {
   brand?: string | null;
   default_dosage_mg?: number | null;
   imageUrl?: string | null;
+  thumbnailUrl?: string | null; // New field for AI-extracted supplement thumbnails
   created_by?: string | null;
   created_at: string;
   // Runtime property added for multi-ingredient detection
