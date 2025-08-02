@@ -8,10 +8,12 @@ The Supplement Tracker now includes AI-powered photo capture functionality using
 Add these to your `.env` file:
 
 ```env
-# Moondream API Configuration
+# Moondream API Configuration (used by Netlify function)
 VITE_MOONDREAM_API_URL=https://api.moondream.ai/v1
 VITE_MOONDREAM_API_KEY=your_moondream_api_key_here
 ```
+
+**Note**: The API key is kept secure on the server side using a Netlify function proxy.
 
 ## Features Implemented
 
@@ -40,8 +42,16 @@ VITE_MOONDREAM_API_KEY=your_moondream_api_key_here
 
 ## API Integration Details
 
+### Netlify Function Proxy
+The integration uses a Netlify function (`moondream-proxy.ts`) to securely proxy requests to the [Moondream API](https://moondream.ai/c/docs/advanced/api/query). This approach:
+
+- **Keeps API keys secure** on the server side
+- **Avoids CORS issues** by proxying through Netlify
+- **Provides better error handling** and logging
+- **Enables rate limiting** and request validation
+
 ### Moondream API Endpoint
-The integration uses the `/query` endpoint from the [Moondream API](https://moondream.ai/c/docs/advanced/api/query) for Visual Question Answering (VQA).
+The Netlify function forwards requests to the `/query` endpoint from the Moondream API for Visual Question Answering (VQA).
 The integration uses the Moondream API to extract supplement information from images. The API expects:
 
 **Request:**

@@ -17,19 +17,13 @@ export interface MoondreamApiResponse {
   confidence: number;
 }
 
-// You'll need to replace this with your actual Moondream API endpoint and key
-const MOONDREAM_API_URL = import.meta.env.VITE_MOONDREAM_API_URL || 'https://api.moondream.ai/v1';
-const MOONDREAM_API_KEY = import.meta.env.VITE_MOONDREAM_API_KEY;
+// Use Netlify function to proxy Moondream API calls
+const MOONDREAM_PROXY_URL = '/.netlify/functions/moondream-proxy';
 
 export async function extractSupplementFromImage(imageFile: File): Promise<MoondreamExtractionResult> {
   try {
-    if (!MOONDREAM_API_KEY) {
-      throw new Error('Moondream API key not configured');
-    }
-
-    // Debug: Log the API URL being used
-    console.log('Using Moondream API URL:', MOONDREAM_API_URL);
-    console.log('API Key configured:', !!MOONDREAM_API_KEY);
+    // Debug: Log the proxy URL being used
+    console.log('Using Moondream proxy URL:', MOONDREAM_PROXY_URL);
 
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
@@ -51,19 +45,18 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       question: prompt
     };
     
-    console.log('Sending request to Moondream API:', {
-      url: `${MOONDREAM_API_URL}/query`,
+    console.log('Sending request to Moondream proxy:', {
+      url: MOONDREAM_PROXY_URL,
       body: {
         ...requestBody,
         image_url: `${requestBody.image_url.substring(0, 50)}...` // Truncate for logging
       }
     });
 
-    const response = await fetch(`${MOONDREAM_API_URL}/query`, {
+    const response = await fetch(MOONDREAM_PROXY_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${MOONDREAM_API_KEY}`,
       },
       body: JSON.stringify(requestBody),
     });
