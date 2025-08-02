@@ -13,6 +13,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const [error, setError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -49,6 +50,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       console.log('Camera stream obtained:', stream);
       
       if (videoRef.current) {
+        console.log('Setting video srcObject...');
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         
@@ -74,11 +76,28 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
         videoRef.current.onplay = () => {
           console.log('Video started playing');
           setIsCameraLoading(false);
+          setIsVideoPlaying(true);
         };
         
         videoRef.current.onerror = (err) => {
           console.error('Video error:', err);
           setIsCameraLoading(false);
+          setIsVideoPlaying(false);
+        };
+        
+        // Try to play immediately as well
+        videoRef.current.play().catch(err => {
+          console.log('Immediate play failed, will retry:', err);
+        });
+        
+        // Additional fallback - try again after video is ready
+        videoRef.current.oncanplay = () => {
+          console.log('Video can play');
+          if (videoRef.current && videoRef.current.paused) {
+            videoRef.current.play().catch(err => {
+              console.error('Error in oncanplay play:', err);
+            });
+          }
         };
       }
     } catch (err) {
@@ -103,6 +122,8 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+    setIsVideoPlaying(false);
+    setIsCameraLoading(false);
   };
 
   const capturePhoto = () => {
@@ -223,9 +244,18 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                         autoPlay
                         playsInline
                         muted
+                        controls={false}
                         className={`w-full h-64 object-cover rounded-lg border-2 border-blue-500 ${isCameraLoading ? 'hidden' : ''}`}
                         style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
                       />
+                      {!isVideoPlaying && !isCameraLoading && (
+                        <div className="absolute inset-0 bg-gray-100 rounded-lg border-2 border-blue-500 flex items-center justify-center">
+                          <div className="text-center">
+                            <Camera className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                            <p className="text-gray-600 text-sm">Camera ready - tap to capture</p>
+                          </div>
+                        </div>
+                      )}
                       <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-xs">
                         Camera Active
                       </div>
