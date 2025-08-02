@@ -52,6 +52,10 @@ export function SupplementTracker() {
   const [extractionResult, setExtractionResult] = useState<MoondreamExtractionResult | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
+  // Edit supplement states
+  const [editingSupplement, setEditingSupplement] = useState<UserSupplement | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+
   // Helper function to filter out ingredient supplements from main list
   const filterMainSupplements = (supplements: UserSupplement[]): UserSupplement[] => {
     return supplements.filter(us => {
@@ -1775,6 +1779,46 @@ export function SupplementTracker() {
     );
   }
 
+  // Open edit modal for supplement
+  const handleEditSupplement = (userSupplement: UserSupplement) => {
+    setEditingSupplement(userSupplement);
+    setShowEditModal(true);
+  };
+
+  // Save edited supplement
+  const handleSaveEditedSupplement = async (editedData: MoondreamExtractionResult) => {
+    if (!editingSupplement || !userId) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      // Update the supplement information
+      const { error } = await supabase
+        .from('user_supplements')
+        .update({
+          custom_dosage_mg: editedData.dosage ? parseInt(editedData.dosage) : null,
+        })
+        .eq('id', editingSupplement.id);
+
+      if (error) throw error;
+
+      // Refresh user supplements
+      const updated = await getUserSupplements(userId);
+      const reconstructed = reconstructIngredientInfo(updated);
+      const mainSupplements = filterMainSupplements(reconstructed);
+      setUserSupplements(mainSupplements);
+      
+      setShowEditModal(false);
+      setEditingSupplement(null);
+      setSuccessMessage('Supplement updated successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (e: any) {
+      setError('Failed to update supplement: ' + (e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-x-hidden">
       <div className="max-w-6xl mx-auto p-6 overflow-x-hidden">
@@ -2222,6 +2266,15 @@ export function SupplementTracker() {
                                 <Info size={14} />
                               </button>
                             )}
+                            {/* Edit button */}
+                            <button
+                              className="ml-1 p-1 text-green-500 hover:text-green-700 disabled:opacity-50"
+                              onClick={() => handleEditSupplement(group.main)}
+                              disabled={loading}
+                              title="Edit supplement"
+                            >
+                              <Edit2 size={14} />
+                            </button>
                             {/* Delete button next to info icon */}
                             <button
                               className="ml-1 p-1 text-red-500 hover:text-red-700 disabled:opacity-50"
@@ -2542,6 +2595,30 @@ export function SupplementTracker() {
             extractionResult={extractionResult}
             thumbnailFile={thumbnailFile}
             onSave={handleExtractionSave}
+          />
+        )}
+
+        {/* Edit Supplement Modal */}
+        {editingSupplement && (
+          <ExtractionPreviewModal
+            isOpen={showEditModal}
+            onClose={() => {
+              setShowEditModal(false);
+              setEditingSupplement(null);
+            }}
+            extractionResult={{
+              supplementName: editingSupplement.supplement?.name || '',
+              brand: editingSupplement.supplement?.brand || '',
+              dosage: editingSupplement.custom_dosage_mg?.toString() || editingSupplement.supplement?.default_dosage_mg?.toString() || '',
+              ingredients: editingSupplement.supplement?._ingredientInfo?.ingredients?.map(i => i.name) || [],
+              servingSize: '',
+              servingsPerContainer: '',
+              manufacturer: editingSupplement.supplement?.brand || '',
+              confidence: 1.0,
+              rawText: ''
+            }}
+            thumbnailFile={new File([], 'placeholder.jpg', { type: 'image/jpeg' })}
+            onSave={handleSaveEditedSupplement}
           />
         )}
 
