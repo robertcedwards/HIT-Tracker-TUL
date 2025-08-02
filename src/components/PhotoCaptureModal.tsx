@@ -19,6 +19,57 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const streamRef = useRef<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<File | null>(null);
 
+  // Setup video event listeners
+  const setupVideoEventListeners = (videoElement: HTMLVideoElement, stream: MediaStream) => {
+    // Wait for video to load and play
+    videoElement.onloadedmetadata = () => {
+      console.log('Video metadata loaded');
+      videoElement.play().catch(err => {
+        console.error('Error playing video:', err);
+      });
+    };
+    
+    // Force play after a short delay as fallback
+    setTimeout(() => {
+      if (videoElement && videoElement.paused) {
+        console.log('Forcing video play...');
+        videoElement.play().catch(err => {
+          console.error('Error in forced video play:', err);
+        });
+      }
+      // Stop showing loading spinner after 2 seconds regardless
+      setIsCameraLoading(false);
+    }, 2000);
+    
+    // Additional event listeners for debugging
+    videoElement.onplay = () => {
+      console.log('Video started playing');
+      setIsCameraLoading(false);
+      setIsVideoPlaying(true);
+    };
+    
+    videoElement.onerror = (err) => {
+      console.error('Video error:', err);
+      setIsCameraLoading(false);
+      setIsVideoPlaying(false);
+    };
+    
+    // Try to play immediately as well
+    videoElement.play().catch(err => {
+      console.log('Immediate play failed, will retry:', err);
+    });
+    
+    // Additional fallback - try again after video is ready
+    videoElement.oncanplay = () => {
+      console.log('Video can play');
+      if (videoElement && videoElement.paused) {
+        videoElement.play().catch(err => {
+          console.error('Error in oncanplay play:', err);
+        });
+      }
+    };
+  };
+
   // Debug video element state
   useEffect(() => {
     if (videoRef.current) {
@@ -64,59 +115,28 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       console.log('Camera stream obtained:', stream);
       
       console.log('Video ref exists:', !!videoRef.current);
-      if (videoRef.current) {
-        console.log('Setting video srcObject...');
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        
-        // Wait for video to load and play
-        videoRef.current.onloadedmetadata = () => {
-          console.log('Video metadata loaded');
-          videoRef.current?.play().catch(err => {
-            console.error('Error playing video:', err);
-          });
-        };
-        
-        // Force play after a short delay as fallback
+      
+      // If video ref doesn't exist yet, wait for it to be available
+      if (!videoRef.current) {
+        console.log('Video ref not available, waiting...');
+        // Wait for the next render cycle
         setTimeout(() => {
-          if (videoRef.current && videoRef.current.paused) {
-            console.log('Forcing video play...');
-            videoRef.current.play().catch(err => {
-              console.error('Error in forced video play:', err);
-            });
+          if (videoRef.current) {
+            console.log('Video ref now available, setting srcObject...');
+            videoRef.current.srcObject = stream;
+            streamRef.current = stream;
+            setupVideoEventListeners(videoRef.current, stream);
+          } else {
+            console.error('Video ref still not available after timeout');
           }
-          // Stop showing loading spinner after 2 seconds regardless
-          setIsCameraLoading(false);
-        }, 2000);
-        
-        // Additional event listeners for debugging
-        videoRef.current.onplay = () => {
-          console.log('Video started playing');
-          setIsCameraLoading(false);
-          setIsVideoPlaying(true);
-        };
-        
-        videoRef.current.onerror = (err) => {
-          console.error('Video error:', err);
-          setIsCameraLoading(false);
-          setIsVideoPlaying(false);
-        };
-        
-        // Try to play immediately as well
-        videoRef.current.play().catch(err => {
-          console.log('Immediate play failed, will retry:', err);
-        });
-        
-        // Additional fallback - try again after video is ready
-        videoRef.current.oncanplay = () => {
-          console.log('Video can play');
-          if (videoRef.current && videoRef.current.paused) {
-            videoRef.current.play().catch(err => {
-              console.error('Error in oncanplay play:', err);
-            });
-          }
-        };
+        }, 100);
+        return;
       }
+      
+      console.log('Setting video srcObject...');
+      videoRef.current.srcObject = stream;
+      streamRef.current = stream;
+      setupVideoEventListeners(videoRef.current, stream);
     } catch (err) {
       setIsCameraLoading(false);
       console.error('Camera error:', err);
