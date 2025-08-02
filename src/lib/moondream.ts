@@ -88,11 +88,23 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       extractedData = parseSupplementText(answerText);
     }
 
+    // Ensure ingredients is always an array
+    let ingredients: string[] = [];
+    const rawIngredients = extractedData.ingredients;
+    if (rawIngredients) {
+      if (Array.isArray(rawIngredients)) {
+        ingredients = rawIngredients;
+      } else if (typeof rawIngredients === 'string') {
+        // Split comma-separated ingredients into array
+        ingredients = (rawIngredients as string).split(',').map((i: string) => i.trim()).filter((i: string) => i.length > 0);
+      }
+    }
+
     return {
       supplementName: extractedData.supplementName || 'Unknown Supplement',
       brand: extractedData.brand,
       dosage: extractedData.dosage,
-      ingredients: extractedData.ingredients,
+      ingredients: ingredients.length > 0 ? ingredients : undefined,
       servingSize: extractedData.servingSize,
       servingsPerContainer: extractedData.servingsPerContainer,
       manufacturer: extractedData.manufacturer,
