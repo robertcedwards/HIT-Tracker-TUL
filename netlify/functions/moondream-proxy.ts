@@ -1,6 +1,8 @@
 // Netlify function handler
 
-const MOONDREAM_API_URL = process.env.VITE_MOONDREAM_API_URL || 'https://api.moondream.ai/v1';
+// Clean up the API URL to remove any HTTP method prefixes
+const rawApiUrl = process.env.VITE_MOONDREAM_API_URL || 'https://api.moondream.ai/v1';
+const MOONDREAM_API_URL = rawApiUrl.replace(/^(GET|POST|PUT|DELETE)\s+/i, '').trim();
 const MOONDREAM_API_KEY = process.env.VITE_MOONDREAM_API_KEY;
 
 export const handler = async (event: any, context: any) => {
@@ -40,7 +42,8 @@ export const handler = async (event: any, context: any) => {
 
   try {
     // Debug: Log environment variables
-    console.log('MOONDREAM_API_URL:', MOONDREAM_API_URL);
+    console.log('Raw API URL from env:', rawApiUrl);
+    console.log('Cleaned API URL:', MOONDREAM_API_URL);
     console.log('API Key configured:', !!MOONDREAM_API_KEY);
     
     // Parse the request body
