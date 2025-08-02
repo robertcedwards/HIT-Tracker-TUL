@@ -47,6 +47,7 @@ export const handler = async (event: any, context: any) => {
     console.log('API Key configured:', !!MOONDREAM_API_KEY);
     console.log('API Key length:', MOONDREAM_API_KEY ? MOONDREAM_API_KEY.length : 0);
     console.log('API Key prefix:', MOONDREAM_API_KEY ? MOONDREAM_API_KEY.substring(0, 10) + '...' : 'undefined');
+    console.log('All env vars starting with VITE_:', Object.keys(process.env).filter(key => key.startsWith('VITE_')));
     
     // Parse the request body
     const body = JSON.parse(event.body || '{}');
