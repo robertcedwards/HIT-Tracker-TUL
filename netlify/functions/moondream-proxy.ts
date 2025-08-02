@@ -45,6 +45,8 @@ export const handler = async (event: any, context: any) => {
     console.log('Raw API URL from env:', rawApiUrl);
     console.log('Cleaned API URL:', MOONDREAM_API_URL);
     console.log('API Key configured:', !!MOONDREAM_API_KEY);
+    console.log('API Key length:', MOONDREAM_API_KEY ? MOONDREAM_API_KEY.length : 0);
+    console.log('API Key prefix:', MOONDREAM_API_KEY ? MOONDREAM_API_KEY.substring(0, 10) + '...' : 'undefined');
     
     // Parse the request body
     const body = JSON.parse(event.body || '{}');
@@ -62,6 +64,10 @@ export const handler = async (event: any, context: any) => {
     // Make request to Moondream API
     const apiUrl = `${MOONDREAM_API_URL}/query`;
     console.log('Making request to:', apiUrl);
+    console.log('Request headers:', {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${MOONDREAM_API_KEY ? '***' + MOONDREAM_API_KEY.substring(MOONDREAM_API_KEY.length - 4) : 'undefined'}`
+    });
     
     const response = await fetch(apiUrl, {
       method: 'POST',
