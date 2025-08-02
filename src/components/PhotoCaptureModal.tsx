@@ -33,6 +33,9 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
 
   const startCamera = async () => {
     try {
+      setError(null);
+      console.log('Starting camera...');
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: 'environment',
@@ -41,12 +44,30 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
         } 
       });
       
+      console.log('Camera stream obtained:', stream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        
+        // Wait for video to load
+        videoRef.current.onloadedmetadata = () => {
+          console.log('Video metadata loaded');
+        };
       }
     } catch (err) {
-      setError('Failed to access camera. Please check permissions.');
+      console.error('Camera error:', err);
+      if (err instanceof Error) {
+        if (err.name === 'NotAllowedError') {
+          setError('Camera access denied. Please allow camera permissions and try again.');
+        } else if (err.name === 'NotFoundError') {
+          setError('No camera found on this device.');
+        } else {
+          setError(`Camera error: ${err.message}`);
+        }
+      } else {
+        setError('Failed to access camera. Please check permissions.');
+      }
     }
   };
 
@@ -151,27 +172,41 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
               
               {/* Camera Capture */}
               <div className="space-y-2">
-                <button
-                  onClick={startCamera}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Camera size={20} />
-                  Use Camera
-                </button>
-                
-                {streamRef.current && (
-                  <div className="relative">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full h-64 object-cover rounded-lg"
-                    />
+                {!streamRef.current ? (
+                  <button
+                    onClick={startCamera}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Camera size={20} />
+                    Use Camera
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
+                      />
+                      <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-xs">
+                        Camera Active
+                      </div>
+                      <button
+                        onClick={capturePhoto}
+                        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white text-gray-800 rounded-lg shadow-lg hover:bg-gray-50"
+                      >
+                        📸 Capture Photo
+                      </button>
+                    </div>
                     <button
-                      onClick={capturePhoto}
-                      className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white text-gray-800 rounded-lg shadow-lg hover:bg-gray-50"
+                      onClick={() => {
+                        stopCamera();
+                        setError(null);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
                     >
-                      Capture Photo
+                      Stop Camera
                     </button>
                   </div>
                 )}
