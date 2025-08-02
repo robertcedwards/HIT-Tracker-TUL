@@ -1,7 +1,7 @@
 const DSLD_API_KEY = process.env.DSLD_API_KEY;
 const BASE_URL = 'https://api.ods.od.nih.gov/dsld/v9';
 
-exports.handler = async function(event, context) {
+export const handler = async function(event: any, context: any) {
   const { type, q, dsldId } = event.queryStringParameters || {};
 
   if (!DSLD_API_KEY) {
