@@ -39,6 +39,10 @@ export const handler = async (event: any, context: any) => {
   }
 
   try {
+    // Debug: Log environment variables
+    console.log('MOONDREAM_API_URL:', MOONDREAM_API_URL);
+    console.log('API Key configured:', !!MOONDREAM_API_KEY);
+    
     // Parse the request body
     const body = JSON.parse(event.body || '{}');
     const { image_url, question } = body;
@@ -53,7 +57,10 @@ export const handler = async (event: any, context: any) => {
     }
 
     // Make request to Moondream API
-    const response = await fetch(`${MOONDREAM_API_URL}/query`, {
+    const apiUrl = `${MOONDREAM_API_URL}/query`;
+    console.log('Making request to:', apiUrl);
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
