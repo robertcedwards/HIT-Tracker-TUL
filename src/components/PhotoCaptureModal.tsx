@@ -103,6 +103,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       setError(null);
       setIsCameraLoading(true);
       console.log('Starting camera...');
+      console.log('Video element should now be rendered in DOM');
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
@@ -257,7 +258,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
               
               {/* Camera Capture */}
               <div className="space-y-2">
-                {!streamRef.current ? (
+                {!streamRef.current && !isCameraLoading ? (
                   <button
                     onClick={startCamera}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -265,7 +266,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                     <Camera size={20} />
                     Use Camera
                   </button>
-                                ) : (
+                ) : (
                   <div className="space-y-2">
                     <div className="relative">
                       {isCameraLoading && (
