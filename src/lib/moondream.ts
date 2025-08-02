@@ -18,8 +18,8 @@ export interface MoondreamApiResponse {
 }
 
 // You'll need to replace this with your actual Moondream API endpoint and key
-const MOONDREAM_API_URL = process.env.REACT_APP_MOONDREAM_API_URL || 'https://api.moondream.com/v1';
-const MOONDREAM_API_KEY = process.env.REACT_APP_MOONDREAM_API_KEY;
+const MOONDREAM_API_URL = import.meta.env.VITE_MOONDREAM_API_URL || 'https://api.moondream.com/v1';
+const MOONDREAM_API_KEY = import.meta.env.VITE_MOONDREAM_API_KEY;
 
 export async function extractSupplementFromImage(imageFile: File): Promise<MoondreamExtractionResult> {
   try {
