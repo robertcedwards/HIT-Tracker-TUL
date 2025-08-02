@@ -333,22 +333,24 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
               </div>
 
               {/* File Upload */}
-              <div className="space-y-2">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  <Upload size={20} />
-                  Choose from Gallery
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </div>
+              {!isCameraLoading && (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    <Upload size={20} />
+                    Choose from Gallery
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
