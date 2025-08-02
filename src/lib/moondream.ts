@@ -27,6 +27,9 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       throw new Error('Moondream API key not configured');
     }
 
+    // Debug: Log the API URL being used
+    console.log('Using Moondream API URL:', MOONDREAM_API_URL);
+
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
