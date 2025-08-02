@@ -12,6 +12,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -34,6 +35,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const startCamera = async () => {
     try {
       setError(null);
+      setIsCameraLoading(true);
       console.log('Starting camera...');
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -50,12 +52,37 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         
-        // Wait for video to load
+        // Wait for video to load and play
         videoRef.current.onloadedmetadata = () => {
           console.log('Video metadata loaded');
+          videoRef.current?.play().catch(err => {
+            console.error('Error playing video:', err);
+          });
+        };
+        
+        // Force play after a short delay as fallback
+        setTimeout(() => {
+          if (videoRef.current && videoRef.current.paused) {
+            console.log('Forcing video play...');
+            videoRef.current.play().catch(err => {
+              console.error('Error in forced video play:', err);
+            });
+          }
+        }, 100);
+        
+        // Additional event listeners for debugging
+        videoRef.current.onplay = () => {
+          console.log('Video started playing');
+          setIsCameraLoading(false);
+        };
+        
+        videoRef.current.onerror = (err) => {
+          console.error('Video error:', err);
+          setIsCameraLoading(false);
         };
       }
     } catch (err) {
+      setIsCameraLoading(false);
       console.error('Camera error:', err);
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError') {
@@ -180,21 +207,32 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                     <Camera size={20} />
                     Use Camera
                   </button>
-                ) : (
+                                ) : (
                   <div className="space-y-2">
                     <div className="relative">
+                      {isCameraLoading && (
+                        <div className="w-full h-64 bg-gray-100 rounded-lg border-2 border-blue-500 flex items-center justify-center">
+                          <div className="text-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
+                            <p className="text-gray-600 text-sm">Starting camera...</p>
+                          </div>
+                        </div>
+                      )}
                       <video
                         ref={videoRef}
                         autoPlay
                         playsInline
-                        className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
+                        muted
+                        className={`w-full h-64 object-cover rounded-lg border-2 border-blue-500 ${isCameraLoading ? 'hidden' : ''}`}
+                        style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
                       />
                       <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-xs">
                         Camera Active
                       </div>
                       <button
                         onClick={capturePhoto}
-                        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white text-gray-800 rounded-lg shadow-lg hover:bg-gray-50"
+                        disabled={isCameraLoading}
+                        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white text-gray-800 rounded-lg shadow-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         📸 Capture Photo
                       </button>
