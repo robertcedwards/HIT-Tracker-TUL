@@ -9,7 +9,7 @@ Add these to your `.env` file:
 
 ```env
 # Moondream API Configuration
-VITE_MOONDREAM_API_URL=https://api.moondream.com/v1
+VITE_MOONDREAM_API_URL=https://api.moondream.ai/v1
 VITE_MOONDREAM_API_KEY=your_moondream_api_key_here
 ```
 
@@ -47,16 +47,14 @@ The integration uses the Moondream API to extract supplement information from im
 ```json
 {
   "image": "base64_encoded_image",
-  "prompt": "Extract supplement information from this label...",
-  "format": "json"
+  "prompt": "Extract supplement information from this label..."
 }
 ```
 
 **Response:**
 ```json
 {
-  "text": "{\"supplementName\": \"Vitamin D3\", \"brand\": \"Nature Made\", ...}",
-  "confidence": 0.85
+  "answer": "{\"supplementName\": \"Vitamin D3\", \"brand\": \"Nature Made\", ...}"
 }
 ```
 

@@ -18,7 +18,7 @@ export interface MoondreamApiResponse {
 }
 
 // You'll need to replace this with your actual Moondream API endpoint and key
-const MOONDREAM_API_URL = import.meta.env.VITE_MOONDREAM_API_URL || 'https://api.moondream.com/v1';
+const MOONDREAM_API_URL = import.meta.env.VITE_MOONDREAM_API_URL || 'https://api.moondream.ai/v1';
 const MOONDREAM_API_KEY = import.meta.env.VITE_MOONDREAM_API_KEY;
 
 export async function extractSupplementFromImage(imageFile: File): Promise<MoondreamExtractionResult> {
@@ -42,7 +42,7 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
     
     Only include fields that are clearly visible on the label. If a field is not present, omit it from the JSON.`;
 
-    const response = await fetch(`${MOONDREAM_API_URL}/extract`, {
+    const response = await fetch(`${MOONDREAM_API_URL}/answer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -50,8 +50,7 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       },
       body: JSON.stringify({
         image: base64Image,
-        prompt: prompt,
-        format: 'json'
+        prompt: prompt
       }),
     });
 
@@ -59,15 +58,18 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       throw new Error(`Moondream API error: ${response.status} ${response.statusText}`);
     }
 
-    const data: MoondreamApiResponse = await response.json();
+    const data = await response.json();
+    
+    // Moondream API returns the answer directly in the response
+    const answerText = data.answer || data.text || data.response || '';
     
     // Parse the extracted JSON from the response
     let extractedData: Partial<MoondreamExtractionResult>;
     try {
-      extractedData = JSON.parse(data.text);
+      extractedData = JSON.parse(answerText);
     } catch (parseError) {
       // If JSON parsing fails, try to extract information from raw text
-      extractedData = parseSupplementText(data.text);
+      extractedData = parseSupplementText(answerText);
     }
 
     return {
@@ -79,7 +81,7 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       servingsPerContainer: extractedData.servingsPerContainer,
       manufacturer: extractedData.manufacturer,
       confidence: data.confidence || 0.5,
-      rawText: data.text,
+      rawText: answerText,
     };
 
   } catch (error) {
