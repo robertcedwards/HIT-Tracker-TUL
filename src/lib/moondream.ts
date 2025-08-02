@@ -29,6 +29,7 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
 
     // Debug: Log the API URL being used
     console.log('Using Moondream API URL:', MOONDREAM_API_URL);
+    console.log('API Key configured:', !!MOONDREAM_API_KEY);
 
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
@@ -45,23 +46,42 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
     
     Only include fields that are clearly visible on the label. If a field is not present, omit it from the JSON.`;
 
+    const requestBody = {
+      image_url: `data:image/jpeg;base64,${base64Image}`,
+      question: prompt
+    };
+    
+    console.log('Sending request to Moondream API:', {
+      url: `${MOONDREAM_API_URL}/query`,
+      body: {
+        ...requestBody,
+        image_url: `${requestBody.image_url.substring(0, 50)}...` // Truncate for logging
+      }
+    });
+
     const response = await fetch(`${MOONDREAM_API_URL}/query`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${MOONDREAM_API_KEY}`,
       },
-      body: JSON.stringify({
-        image_url: `data:image/jpeg;base64,${base64Image}`,
-        question: prompt
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`Moondream API error: ${response.status} ${response.statusText}`);
+      // Try to get more detailed error information
+      let errorDetails = '';
+      try {
+        const errorData = await response.text();
+        errorDetails = ` - ${errorData}`;
+      } catch (e) {
+        errorDetails = ` - ${response.statusText}`;
+      }
+      throw new Error(`Moondream API error: ${response.status}${errorDetails}`);
     }
 
     const data = await response.json();
+    console.log('Moondream API response:', data);
     
     // Moondream API returns the answer in the 'answer' field
     const answerText = data.answer || '';
@@ -102,6 +122,7 @@ function fileToBase64(file: File): Promise<string> {
       const result = reader.result as string;
       // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
       const base64 = result.split(',')[1];
+      console.log('Image converted to base64, length:', base64.length);
       resolve(base64);
     };
     reader.onerror = error => reject(error);
