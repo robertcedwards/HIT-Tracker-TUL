@@ -88,9 +88,18 @@ export const handler = async (event: any, context: any) => {
       try {
         const errorData = await response.text();
         errorDetails = ` - ${errorData}`;
+        console.log('Moondream API error response:', errorData);
       } catch (e) {
         errorDetails = ` - ${response.statusText}`;
+        console.log('Moondream API error response (text failed):', response.statusText);
       }
+
+      console.log('Full error details:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        errorDetails
+      });
 
       return {
         statusCode: response.status,
