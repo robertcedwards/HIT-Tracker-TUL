@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Loader2, Check, AlertCircle } from 'lucide-react';
 import { extractSupplementFromImage, createThumbnail, MoondreamExtractionResult } from '../lib/moondream';
 
@@ -18,6 +18,20 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<File | null>(null);
+
+  // Debug video element state
+  useEffect(() => {
+    if (videoRef.current) {
+      console.log('Video element state:', {
+        readyState: videoRef.current.readyState,
+        paused: videoRef.current.paused,
+        currentTime: videoRef.current.currentTime,
+        srcObject: !!videoRef.current.srcObject,
+        videoWidth: videoRef.current.videoWidth,
+        videoHeight: videoRef.current.videoHeight
+      });
+    }
+  }, [isVideoPlaying, isCameraLoading]);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -49,6 +63,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       
       console.log('Camera stream obtained:', stream);
       
+      console.log('Video ref exists:', !!videoRef.current);
       if (videoRef.current) {
         console.log('Setting video srcObject...');
         videoRef.current.srcObject = stream;
@@ -70,7 +85,9 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
               console.error('Error in forced video play:', err);
             });
           }
-        }, 100);
+          // Stop showing loading spinner after 2 seconds regardless
+          setIsCameraLoading(false);
+        }, 2000);
         
         // Additional event listeners for debugging
         videoRef.current.onplay = () => {
@@ -245,8 +262,16 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                         playsInline
                         muted
                         controls={false}
-                        className={`w-full h-64 object-cover rounded-lg border-2 border-blue-500 ${isCameraLoading ? 'hidden' : ''}`}
+                        className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
                         style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
+                        onClick={() => {
+                          console.log('Video clicked, attempting to play...');
+                          if (videoRef.current && videoRef.current.paused) {
+                            videoRef.current.play().catch(err => {
+                              console.error('Error playing video on click:', err);
+                            });
+                          }
+                        }}
                       />
                       {!isVideoPlaying && !isCameraLoading && (
                         <div className="absolute inset-0 bg-gray-100 rounded-lg border-2 border-blue-500 flex items-center justify-center">
