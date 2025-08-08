@@ -20,7 +20,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const [capturedImage, setCapturedImage] = useState<File | null>(null);
 
   // Setup video event listeners
-  const setupVideoEventListeners = (videoElement: HTMLVideoElement, stream: MediaStream) => {
+  const setupVideoEventListeners = (videoElement: HTMLVideoElement) => {
     // Wait for video to load and play
     videoElement.onloadedmetadata = () => {
       console.log('Video metadata loaded');
@@ -126,7 +126,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
             console.log('Video ref now available, setting srcObject...');
             videoRef.current.srcObject = stream;
             streamRef.current = stream;
-            setupVideoEventListeners(videoRef.current, stream);
+            setupVideoEventListeners(videoRef.current);
           } else {
             console.error('Video ref still not available after timeout');
           }
@@ -137,7 +137,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       console.log('Setting video srcObject...');
       videoRef.current.srcObject = stream;
       streamRef.current = stream;
-      setupVideoEventListeners(videoRef.current, stream);
+                  setupVideoEventListeners(videoRef.current);
     } catch (err) {
       setIsCameraLoading(false);
       console.error('Camera error:', err);

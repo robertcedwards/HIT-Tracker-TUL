@@ -50,7 +50,7 @@ export async function addSupplementWithThumbnail(
 
     // Upload thumbnail to Supabase Storage
     const fileName = `supplement-thumbnails/${Date.now()}-${thumbnailFile.name}`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
       .from('supplements')
       .upload(fileName, thumbnailFile);
 
