@@ -14,6 +14,9 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isCameraLoading, setIsCameraLoading] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [showCameraSelector, setShowCameraSelector] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -84,6 +87,25 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
     }
   }, [isVideoPlaying, isCameraLoading]);
 
+  // Get available cameras
+  const getAvailableCameras = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(device => device.kind === 'videoinput');
+      setAvailableCameras(cameras);
+      
+      // Auto-select the first camera if none selected
+      if (cameras.length > 0 && !selectedCameraId) {
+        setSelectedCameraId(cameras[0].deviceId);
+      }
+      
+      return cameras;
+    } catch (err) {
+      console.error('Error getting cameras:', err);
+      return [];
+    }
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -105,12 +127,32 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       console.log('Starting camera...');
       console.log('Video element should now be rendered in DOM');
       
+      // Get available cameras if we haven't already
+      if (availableCameras.length === 0) {
+        await getAvailableCameras();
+      }
+      
+      // If multiple cameras available and none selected, show selector
+      if (availableCameras.length > 1 && !selectedCameraId) {
+        setShowCameraSelector(true);
+        setIsCameraLoading(false);
+        return;
+      }
+      
+      const videoConstraints: MediaTrackConstraints = {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      };
+      
+      // Use selected camera if available, otherwise use default
+      if (selectedCameraId) {
+        videoConstraints.deviceId = { exact: selectedCameraId };
+      } else {
+        videoConstraints.facingMode = 'environment';
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        } 
+        video: videoConstraints
       });
       
       console.log('Camera stream obtained:', stream);
@@ -175,6 +217,9 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     
+    // Flip the image horizontally to correct the mirror effect
+    context.scale(-1, 1);
+    context.translate(-canvas.width, 0);
     context.drawImage(videoRef.current, 0, 0);
     
     canvas.toBlob((blob) => {
@@ -220,6 +265,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
     setError(null);
     setPreviewImage(null);
     setCapturedImage(null);
+    setShowCameraSelector(false);
     if (previewImage) {
       URL.revokeObjectURL(previewImage);
     }
@@ -256,15 +302,59 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                 Take a clear photo of the supplement label to automatically extract information.
               </p>
               
+              {/* Camera Selector */}
+              {showCameraSelector && availableCameras.length > 1 && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Select Camera
+                  </label>
+                  <select
+                    value={selectedCameraId}
+                    onChange={(e) => setSelectedCameraId(e.target.value)}
+                    className="w-full p-2 border rounded-lg"
+                  >
+                    {availableCameras.map((camera) => (
+                      <option key={camera.deviceId} value={camera.deviceId}>
+                        {camera.label || `Camera ${camera.deviceId.slice(0, 8)}...`}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setShowCameraSelector(false);
+                        startCamera();
+                      }}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Use Selected Camera
+                    </button>
+                    <button
+                      onClick={() => setShowCameraSelector(false)}
+                      className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               {/* Camera Capture */}
               <div className="space-y-2">
-                {!streamRef.current && !isCameraLoading ? (
+                {!streamRef.current && !isCameraLoading && !showCameraSelector ? (
                   <button
-                    onClick={startCamera}
+                    onClick={async () => {
+                      const cameras = await getAvailableCameras();
+                      if (cameras.length > 1) {
+                        setShowCameraSelector(true);
+                      } else {
+                        startCamera();
+                      }
+                    }}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <Camera size={20} />
-                    Use Camera
+                    Use Camera {availableCameras.length > 1 ? `(${availableCameras.length} available)` : ''}
                   </button>
                 ) : (
                   <div className="space-y-2">
@@ -276,7 +366,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                         muted
                         controls={false}
                         className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
-                        style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX
+                        style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX (like a mirror)
                         onClick={() => {
                           console.log('Video clicked, attempting to play...');
                           if (videoRef.current && videoRef.current.paused) {
