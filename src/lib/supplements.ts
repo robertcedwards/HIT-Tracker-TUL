@@ -35,6 +35,51 @@ export async function addSupplement(supplement: Partial<Supplement>): Promise<Su
   }
 }
 
+export async function addSupplementWithThumbnail(
+  supplement: Partial<Supplement>, 
+  thumbnailFile: File
+): Promise<Supplement> {
+  try {
+    // Debug: Log thumbnail file info
+    console.log('Thumbnail file info:', {
+      name: thumbnailFile.name,
+      size: thumbnailFile.size,
+      type: thumbnailFile.type,
+      sizeInMB: (thumbnailFile.size / (1024 * 1024)).toFixed(2)
+    });
+
+    // Upload thumbnail to Supabase Storage
+    const fileName = `supplement-thumbnails/${Date.now()}-${thumbnailFile.name}`;
+          const { error: uploadError } = await supabase.storage
+      .from('supplements')
+      .upload(fileName, thumbnailFile);
+
+    if (uploadError) {
+      console.error('Error uploading thumbnail:', uploadError);
+      console.log('Continuing without thumbnail upload...');
+      
+      // Continue without thumbnail - just add the supplement
+      return await addSupplement(supplement);
+    }
+
+    // Get public URL for the uploaded thumbnail
+    const { data: urlData } = supabase.storage
+      .from('supplements')
+      .getPublicUrl(fileName);
+
+    // Add supplement with thumbnail URL
+    const supplementWithThumbnail = {
+      ...supplement,
+      thumbnailUrl: urlData.publicUrl
+    };
+
+    return await addSupplement(supplementWithThumbnail);
+  } catch (error) {
+    logError(error, 'addSupplementWithThumbnail');
+    throw error;
+  }
+}
+
 export async function getSupplementById(id: string): Promise<Supplement | null> {
   const { data, error } = await supabase
     .from('supplements')
