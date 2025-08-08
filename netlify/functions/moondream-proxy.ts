@@ -34,10 +34,22 @@ export const handler = async (event: any, context: any) => {
 
   // Check if API key is configured
   if (!MOONDREAM_API_KEY) {
+    console.error('API Key not found. Environment variables:');
+    console.error('- VITE_MOONDREAM_API_KEY:', process.env.VITE_MOONDREAM_API_KEY ? 'EXISTS' : 'NOT FOUND');
+    console.error('- MOONDREAM_API_KEY:', process.env.MOONDREAM_API_KEY ? 'EXISTS' : 'NOT FOUND');
+    console.error('- All env vars:', Object.keys(process.env).filter(key => key.includes('MOONDREAM')));
+    
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Moondream API key not configured' }),
+      body: JSON.stringify({ 
+        error: 'Moondream API key not configured',
+        debug: {
+          viteKeyExists: !!process.env.VITE_MOONDREAM_API_KEY,
+          plainKeyExists: !!process.env.MOONDREAM_API_KEY,
+          availableKeys: Object.keys(process.env).filter(key => key.includes('MOONDREAM'))
+        }
+      }),
     };
   }
 
