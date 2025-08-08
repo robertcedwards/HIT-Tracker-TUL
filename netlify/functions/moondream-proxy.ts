@@ -3,7 +3,8 @@
 // Clean up the API URL to remove any HTTP method prefixes
 const rawApiUrl = process.env.VITE_MOONDREAM_API_URL || 'https://api.moondream.ai/v1';
 const MOONDREAM_API_URL = rawApiUrl.replace(/^(GET|POST|PUT|DELETE)\s+/i, '').trim();
-const MOONDREAM_API_KEY = process.env.VITE_MOONDREAM_API_KEY;
+// Try both VITE_ prefixed and non-prefixed versions for flexibility
+const MOONDREAM_API_KEY = process.env.VITE_MOONDREAM_API_KEY || process.env.MOONDREAM_API_KEY;
 
 export const handler = async (event: any, context: any) => {
   // Enable CORS
@@ -47,7 +48,10 @@ export const handler = async (event: any, context: any) => {
     console.log('API Key configured:', !!MOONDREAM_API_KEY);
     console.log('API Key length:', MOONDREAM_API_KEY ? MOONDREAM_API_KEY.length : 0);
     console.log('API Key prefix:', MOONDREAM_API_KEY ? MOONDREAM_API_KEY.substring(0, 10) + '...' : 'undefined');
+    console.log('VITE_MOONDREAM_API_KEY exists:', !!process.env.VITE_MOONDREAM_API_KEY);
+    console.log('MOONDREAM_API_KEY exists:', !!process.env.MOONDREAM_API_KEY);
     console.log('All env vars starting with VITE_:', Object.keys(process.env).filter(key => key.startsWith('VITE_')));
+    console.log('All env vars starting with MOONDREAM:', Object.keys(process.env).filter(key => key.startsWith('MOONDREAM')));
     
     // Parse the request body
     const body = JSON.parse(event.body || '{}');
