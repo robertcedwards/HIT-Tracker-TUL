@@ -217,9 +217,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     
-    // Flip the image horizontally to correct the mirror effect
-    context.scale(-1, 1);
-    context.translate(-canvas.width, 0);
+    // Draw the image without flipping - the video preview is mirrored for UX but we want the actual image
     context.drawImage(videoRef.current, 0, 0);
     
     canvas.toBlob((blob) => {
@@ -366,7 +364,6 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                         muted
                         controls={false}
                         className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
-                        style={{ transform: 'scaleX(-1)' }} // Mirror the camera for better UX (like a mirror)
                         onClick={() => {
                           console.log('Video clicked, attempting to play...');
                           if (videoRef.current && videoRef.current.paused) {
