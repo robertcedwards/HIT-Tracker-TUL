@@ -1432,6 +1432,12 @@ export function SupplementTracker() {
 
   // Photo capture and AI extraction handlers
   const handlePhotoCaptureComplete = (result: MoondreamExtractionResult, thumbnail: File) => {
+    // Validate thumbnail file
+    if (!thumbnail || thumbnail.size === 0) {
+      setError('Failed to create thumbnail image. Please try again.');
+      return;
+    }
+    
     setExtractionResult(result);
     setThumbnailFile(thumbnail);
     setShowPhotoCapture(false);
@@ -1483,10 +1489,22 @@ export function SupplementTracker() {
       setSuccessMessage('Supplement added successfully!');
       setTimeout(() => setSuccessMessage(null), 3000);
 
+      // Store the thumbnail URL for display in the modal
+      const thumbnailUrl = newSupplement.thumbnailUrl;
+      
       // Close modals and reset state
       setShowExtractionPreview(false);
       setExtractionResult(null);
       setThumbnailFile(null);
+
+      // Show the saved supplement in edit mode with the thumbnail
+      if (newSupplement.id) {
+        const savedUserSupplement = updatedSupplements.find(us => us.supplement?.id === newSupplement.id);
+        if (savedUserSupplement) {
+          setEditingSupplement(savedUserSupplement);
+          setShowEditModal(true);
+        }
+      }
 
     } catch (error) {
       console.error('Error saving extracted supplement:', error);
@@ -2584,8 +2602,9 @@ export function SupplementTracker() {
         />
 
         {/* Extraction Preview Modal */}
-        {extractionResult && thumbnailFile && (
+        {extractionResult && thumbnailFile && thumbnailFile.size > 0 && (
           <ExtractionPreviewModal
+            key="photo-capture-modal"
             isOpen={showExtractionPreview}
             onClose={() => {
               setShowExtractionPreview(false);
@@ -2601,6 +2620,7 @@ export function SupplementTracker() {
         {/* Edit Supplement Modal */}
         {editingSupplement && (
           <ExtractionPreviewModal
+            key="edit-supplement-modal"
             isOpen={showEditModal}
             onClose={() => {
               setShowEditModal(false);
@@ -2617,7 +2637,8 @@ export function SupplementTracker() {
               confidence: 1.0,
               rawText: ''
             }}
-            thumbnailFile={new File([], 'placeholder.jpg', { type: 'image/jpeg' })}
+            thumbnailFile={undefined}
+            thumbnailUrl={editingSupplement.supplement?.thumbnailUrl || undefined}
             onSave={handleSaveEditedSupplement}
           />
         )}

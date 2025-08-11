@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, Save, AlertTriangle, CheckCircle, Edit3 } from 'lucide-react';
 import { MoondreamExtractionResult } from '../lib/moondream';
 
@@ -6,31 +6,151 @@ interface ExtractionPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   extractionResult: MoondreamExtractionResult;
-  thumbnailFile: File;
+  thumbnailFile?: File;
+  thumbnailUrl?: string; // Add support for thumbnail URLs
   onSave: (editedData: MoondreamExtractionResult) => void;
 }
 
-export function ExtractionPreviewModal({ 
-  isOpen, 
-  onClose, 
-  extractionResult, 
-  thumbnailFile, 
-  onSave 
+export function ExtractionPreviewModal({
+  isOpen,
+  onClose,
+  extractionResult,
+  thumbnailFile,
+  thumbnailUrl,
+  onSave,
 }: ExtractionPreviewModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<MoondreamExtractionResult>(extractionResult);
   const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
+  const [isImageLoading, setIsImageLoading] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState<string | null>(null);
+  const imageLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Generate thumbnail preview
   React.useEffect(() => {
-    if (thumbnailFile) {
+    // Priority: thumbnailFile over thumbnailUrl
+    if (thumbnailFile && thumbnailFile.size > 0) {
+      // Check if this is a placeholder file (very small size or placeholder name)
+      if (thumbnailFile.size < 100 || thumbnailFile.name === 'placeholder.jpg') {
+        setThumbnailPreview('');
+        return;
+      }
+
+      // Reset error state and set loading
+      setImageLoadError(null);
+      setIsImageLoading(true);
+
+      // Clear any existing timeout
+      if (imageLoadTimeoutRef.current) {
+        clearTimeout(imageLoadTimeoutRef.current);
+      }
+
+      // Set a timeout for file reading (5 seconds)
+      const timeout = setTimeout(() => {
+        setIsImageLoading(false);
+        setImageLoadError('File reading timeout');
+      }, 5000);
+      imageLoadTimeoutRef.current = timeout;
+
       const reader = new FileReader();
+      
       reader.onload = (e) => {
-        setThumbnailPreview(e.target?.result as string);
+        const result = e.target?.result as string;
+        if (result) {
+          setThumbnailPreview(result);
+          setIsImageLoading(false);
+          setImageLoadError(null);
+        } else {
+          setThumbnailPreview('');
+          setIsImageLoading(false);
+          setImageLoadError('Failed to read file');
+        }
+        
+        // Clear the timeout since file reading completed
+        if (imageLoadTimeoutRef.current) {
+          clearTimeout(imageLoadTimeoutRef.current);
+          imageLoadTimeoutRef.current = null;
+        }
       };
-      reader.readAsDataURL(thumbnailFile);
+      
+      reader.onerror = (e) => {
+        setThumbnailPreview('');
+        setIsImageLoading(false);
+        setImageLoadError('Failed to read file');
+        
+        // Clear the timeout since file reading failed
+        if (imageLoadTimeoutRef.current) {
+          clearTimeout(imageLoadTimeoutRef.current);
+          imageLoadTimeoutRef.current = null;
+        }
+      };
+      
+      reader.onabort = () => {
+        setThumbnailPreview('');
+        setIsImageLoading(false);
+        setImageLoadError('File reading aborted');
+        
+        // Clear the timeout since file reading was aborted
+        if (imageLoadTimeoutRef.current) {
+          clearTimeout(imageLoadTimeoutRef.current);
+          imageLoadTimeoutRef.current = null;
+        }
+      };
+      
+      try {
+        reader.readAsDataURL(thumbnailFile);
+      } catch (err) {
+        setThumbnailPreview('');
+        setIsImageLoading(false);
+        setImageLoadError('Failed to read file');
+      }
+    } else if (thumbnailUrl) {
+      // Reset error state and set loading
+      setImageLoadError(null);
+      setIsImageLoading(true);
+      
+      // Clear any existing timeout
+      if (imageLoadTimeoutRef.current) {
+        clearTimeout(imageLoadTimeoutRef.current);
+      }
+      
+      // Set a timeout for image loading (10 seconds)
+      const timeout = setTimeout(() => {
+        setIsImageLoading(false);
+        setImageLoadError('Image loading timeout');
+      }, 10000);
+      imageLoadTimeoutRef.current = timeout;
+      
+      // For Supabase URLs, ensure we have the correct format
+      let processedUrl = thumbnailUrl;
+      if (thumbnailUrl.includes('supabase.co')) {
+        // Add a single cache busting parameter to prevent browser caching issues
+        const timestamp = Date.now();
+        processedUrl = `${thumbnailUrl}${thumbnailUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+      }
+      
+      setThumbnailPreview(processedUrl);
+    } else {
+      setThumbnailPreview('');
+      setIsImageLoading(false);
+      setImageLoadError(null);
+      
+      // Clear any existing timeout
+      if (imageLoadTimeoutRef.current) {
+        clearTimeout(imageLoadTimeoutRef.current);
+        imageLoadTimeoutRef.current = null;
+      }
     }
-  }, [thumbnailFile]);
+  }, [thumbnailFile, thumbnailUrl]);
+
+  // Cleanup timeouts on unmount
+  React.useEffect(() => {
+    return () => {
+      if (imageLoadTimeoutRef.current) {
+        clearTimeout(imageLoadTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleFieldChange = (field: keyof MoondreamExtractionResult, value: string | string[]) => {
     setEditedData(prev => ({
@@ -43,6 +163,8 @@ export function ExtractionPreviewModal({
     onSave(editedData);
     setIsEditing(false);
   };
+
+
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 0.8) return 'text-green-600';
@@ -101,13 +223,94 @@ export function ExtractionPreviewModal({
             {/* Thumbnail Preview */}
             <div>
               <h3 className="font-semibold mb-2">Label Image</h3>
-              {thumbnailPreview && (
+              {thumbnailPreview ? (
                 <img
                   src={thumbnailPreview}
                   alt="Supplement label thumbnail"
                   className="w-full h-48 object-contain rounded-lg border"
+                  onLoad={() => {
+                    setIsImageLoading(false);
+                    setImageLoadError(null);
+                    
+                    // Clear the timeout since image loaded successfully
+                    if (imageLoadTimeoutRef.current) {
+                      clearTimeout(imageLoadTimeoutRef.current);
+                      imageLoadTimeoutRef.current = null;
+                    }
+                  }}
+                  onError={(e) => {
+                    setIsImageLoading(false);
+                    setImageLoadError('Failed to load image');
+                    
+                    // Clear the timeout since image failed to load
+                    if (imageLoadTimeoutRef.current) {
+                      clearTimeout(imageLoadTimeoutRef.current);
+                      imageLoadTimeoutRef.current = null;
+                    }
+                  }}
                 />
+              ) : (
+                <div className="w-full h-48 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                  <div className="text-center">
+                    {isImageLoading ? (
+                      <>
+                        <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mx-auto mb-2 animate-pulse">
+                          <span className="text-white text-xl">⏳</span>
+                        </div>
+                        <p className="text-gray-500 text-sm">Loading image...</p>
+                      </>
+                    ) : imageLoadError ? (
+                      <>
+                        <div className="w-12 h-12 bg-red-500 rounded-lg flex items-center justify-center mx-auto mb-2">
+                          <span className="text-white text-xl">❌</span>
+                        </div>
+                        <p className="text-red-500 text-sm">{imageLoadError}</p>
+                        {thumbnailUrl && (
+                          <>
+                            <p className="text-gray-400 text-xs mt-1">
+                              URL: {thumbnailUrl.substring(0, 50)}...
+                            </p>
+                            <button
+                              onClick={() => {
+                                setImageLoadError(null);
+                                setIsImageLoading(true);
+                                // Force a re-render by updating the timestamp
+                                const newTimestamp = Date.now();
+                                const retryUrl = `${thumbnailUrl}${thumbnailUrl.includes('?') ? '&' : '?'}t=${newTimestamp}`;
+                                setThumbnailPreview(retryUrl);
+                              }}
+                              className="mt-2 px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+                            >
+                              Retry
+                            </button>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mx-auto mb-2">
+                          <span className="text-white text-xl font-bold">?</span>
+                        </div>
+                        <p className="text-gray-500 text-sm">
+                          {thumbnailFile || thumbnailUrl ? 'Supplement label thumbnail' : 'No image available'}
+                        </p>
+                        {thumbnailFile && thumbnailFile.size > 0 && (
+                          <p className="text-gray-400 text-xs mt-1">
+                            File: {thumbnailFile.name} ({(thumbnailFile.size / 1024).toFixed(1)}KB)
+                          </p>
+                        )}
+                        {thumbnailUrl && !thumbnailFile && (
+                          <p className="text-gray-400 text-xs mt-1">
+                            URL: {thumbnailUrl.substring(0, 50)}...
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
+              
+
             </div>
 
             {/* Extracted Data */}

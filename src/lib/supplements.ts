@@ -2,6 +2,106 @@ import { supabase } from './supabase';
 import { Supplement, UserSupplement, SupplementUsage } from '../types/Supplement';
 import { handleSupabaseOperation, logError } from './errorHandling';
 
+// Check available storage buckets
+async function getAvailableStorageBuckets(): Promise<string[]> {
+  try {
+    const { data, error } = await supabase.storage.listBuckets();
+    
+    if (error) {
+      return [];
+    }
+    
+    const bucketNames = data?.map(bucket => bucket.name) || [];
+    return bucketNames;
+  } catch (err) {
+    return [];
+  }
+}
+
+// Find a suitable bucket for storing supplement thumbnails
+async function findSuitableBucket(): Promise<string | null> {
+  try {
+    // First, check what buckets are actually available
+    const availableBuckets = await getAvailableStorageBuckets();
+    
+    // Look for a bucket that might be suitable for images
+    const suitableBucket = availableBuckets.find(name => 
+      name.includes('image') || 
+      name.includes('thumbnail') || 
+      name.includes('media') ||
+      name.includes('storage') ||
+      name.includes('public')
+    );
+    
+    if (suitableBucket) {
+      return suitableBucket;
+    }
+    
+    // If no suitable bucket found, try to create one
+    if (availableBuckets.length === 0) {
+      try {
+        const { error: createError } = await supabase.storage.createBucket('supplement-thumbnails', {
+          public: true,
+          allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+          fileSizeLimit: 5242880 // 5MB
+        });
+        
+        if (createError) {
+          return null;
+        } else {
+          return 'supplement-thumbnails';
+        }
+      } catch (err) {
+        return null;
+      }
+    }
+    
+    // If we have buckets but none are suitable, use the first one
+    if (availableBuckets.length > 0) {
+      return availableBuckets[0];
+    }
+    
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Convert file to base64 for fallback storage
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result);
+    };
+    reader.onerror = error => reject(error);
+  });
+}
+
+// Utility functions for thumbnail handling
+export function isBase64Thumbnail(url: string): boolean {
+  return url.startsWith('data:image/');
+}
+
+export function getThumbnailSrc(thumbnailUrl: string | null): string | null {
+  if (!thumbnailUrl) return null;
+  
+  // If it's already a base64 string, return as is
+  if (isBase64Thumbnail(thumbnailUrl)) {
+    return thumbnailUrl;
+  }
+  
+  // If it's a regular URL, return as is
+  if (thumbnailUrl.startsWith('http://') || thumbnailUrl.startsWith('https://')) {
+    return thumbnailUrl;
+  }
+  
+  // If it's a relative path, assume it's a Supabase storage URL
+  return thumbnailUrl;
+}
+
 // --- Supplement (global/shared) ---
 export async function searchSupplements(keyword: string): Promise<Supplement[]> {
   try {
@@ -40,31 +140,60 @@ export async function addSupplementWithThumbnail(
   thumbnailFile: File
 ): Promise<Supplement> {
   try {
-    // Debug: Log thumbnail file info
-    console.log('Thumbnail file info:', {
-      name: thumbnailFile.name,
-      size: thumbnailFile.size,
-      type: thumbnailFile.type,
-      sizeInMB: (thumbnailFile.size / (1024 * 1024)).toFixed(2)
-    });
+    // Find a suitable storage bucket
+    const bucketName = await findSuitableBucket();
+    if (!bucketName) {
+      // Store thumbnail as base64 in the database as fallback
+      try {
+        const base64Thumbnail = await fileToBase64(thumbnailFile);
+        const supplementWithBase64Thumbnail = {
+          ...supplement,
+          thumbnailUrl: base64Thumbnail // Store base64 data in thumbnailUrl field
+        };
+        return await addSupplement(supplementWithBase64Thumbnail);
+      } catch (base64Error) {
+        return await addSupplement(supplement);
+      }
+    }
 
     // Upload thumbnail to Supabase Storage
-    const fileName = `supplement-thumbnails/${Date.now()}-${thumbnailFile.name}`;
-          const { error: uploadError } = await supabase.storage
-      .from('supplements')
+    const fileName = `${Date.now()}-${thumbnailFile.name}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from(bucketName)
       .upload(fileName, thumbnailFile);
 
     if (uploadError) {
-      console.error('Error uploading thumbnail:', uploadError);
-      console.log('Continuing without thumbnail upload...');
-      
-      // Continue without thumbnail - just add the supplement
-      return await addSupplement(supplement);
+      // If bucket doesn't exist, try to create it (this requires admin privileges)
+      if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('404')) {
+        // Try to create the bucket (this may fail without admin privileges)
+        const { error: createBucketError } = await supabase.storage.createBucket(bucketName, {
+          public: true,
+          allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+          fileSizeLimit: 5242880 // 5MB
+        });
+        
+        if (createBucketError) {
+          // Continue without thumbnail - just add the supplement
+          return await addSupplement(supplement);
+        } else {
+          // Retry the upload
+          const { error: retryError } = await supabase.storage
+            .from(bucketName)
+            .upload(fileName, thumbnailFile);
+            
+          if (retryError) {
+            return await addSupplement(supplement);
+          }
+        }
+      } else {
+        return await addSupplement(supplement);
+      }
     }
 
     // Get public URL for the uploaded thumbnail
     const { data: urlData } = supabase.storage
-      .from('supplements')
+      .from(bucketName)
       .getPublicUrl(fileName);
 
     // Add supplement with thumbnail URL
@@ -76,7 +205,18 @@ export async function addSupplementWithThumbnail(
     return await addSupplement(supplementWithThumbnail);
   } catch (error) {
     logError(error, 'addSupplementWithThumbnail');
-    throw error;
+    
+    // Fallback: try to store thumbnail as base64
+    try {
+      const base64Thumbnail = await fileToBase64(thumbnailFile);
+      const supplementWithBase64Thumbnail = {
+        ...supplement,
+        thumbnailUrl: base64Thumbnail
+      };
+      return await addSupplement(supplementWithBase64Thumbnail);
+    } catch (base64Error) {
+      return await addSupplement(supplement);
+    }
   }
 }
 

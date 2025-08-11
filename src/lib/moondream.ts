@@ -22,9 +22,6 @@ const MOONDREAM_PROXY_URL = '/.netlify/functions/moondream-proxy';
 
 export async function extractSupplementFromImage(imageFile: File): Promise<MoondreamExtractionResult> {
   try {
-    // Debug: Log the proxy URL being used
-    console.log('Using Moondream proxy URL:', MOONDREAM_PROXY_URL);
-
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
@@ -44,14 +41,6 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
       image_url: `data:image/jpeg;base64,${base64Image}`,
       question: prompt
     };
-    
-    console.log('Sending request to Moondream proxy:', {
-      url: MOONDREAM_PROXY_URL,
-      body: {
-        ...requestBody,
-        image_url: `${requestBody.image_url.substring(0, 50)}...` // Truncate for logging
-      }
-    });
 
     const response = await fetch(MOONDREAM_PROXY_URL, {
       method: 'POST',
@@ -74,7 +63,6 @@ export async function extractSupplementFromImage(imageFile: File): Promise<Moond
     }
 
     const data = await response.json();
-    console.log('Moondream API response:', data);
     
     // Moondream API returns the answer in the 'answer' field
     const answerText = data.answer || '';
@@ -127,7 +115,6 @@ function fileToBase64(file: File): Promise<string> {
       const result = reader.result as string;
       // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
       const base64 = result.split(',')[1];
-      console.log('Image converted to base64, length:', base64.length);
       resolve(base64);
     };
     reader.onerror = error => reject(error);
@@ -182,11 +169,41 @@ function parseSupplementText(text: string): Partial<MoondreamExtractionResult> {
 // Function to optimize image for storage (create thumbnail)
 export async function createThumbnail(file: File, maxWidth: number = 200, maxHeight: number = 200): Promise<File> {
   return new Promise((resolve, reject) => {
+
+    // Validate input file
+    if (!file || file.size === 0) {
+      reject(new Error('Invalid file provided'));
+      return;
+    }
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const img = new Image();
     
+    if (!ctx) {
+      reject(new Error('Failed to get 2D context from canvas'));
+      return;
+    }
+    
+    const img = new Image();
+    let objectUrl: string | null = null;
+    
+    // Add timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      reject(new Error('Image loading timeout'));
+    }, 10000); // 10 second timeout
+
+    // Set up image event handlers
     img.onload = () => {
+      clearTimeout(timeoutId);
+      
+      // Ensure we have valid dimensions
+      if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        reject(new Error('Image has zero dimensions'));
+        return;
+      }
+      
       // Calculate new dimensions
       let { width, height } = img;
       
@@ -202,22 +219,54 @@ export async function createThumbnail(file: File, maxWidth: number = 200, maxHei
         }
       }
       
+      // Ensure minimum dimensions
+      if (width < 1 || height < 1) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        reject(new Error('Calculated dimensions are too small'));
+        return;
+      }
+      
       canvas.width = width;
       canvas.height = height;
       
       // Draw and compress
-      ctx?.drawImage(img, 0, 0, width, height);
+      try {
+        ctx.drawImage(img, 0, 0, width, height);
+      } catch (drawError) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        reject(new Error('Failed to draw image to canvas'));
+        return;
+      }
       
       canvas.toBlob(
         (blob) => {
+          // Clean up object URL
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+          }
+          
           if (blob) {
+            // Validate blob size
+            if (blob.size === 0) {
+              reject(new Error('Thumbnail blob has 0 bytes'));
+              return;
+            }
+            
             const thumbnailFile = new File([blob], file.name, {
               type: 'image/jpeg',
               lastModified: Date.now(),
             });
+            
+            // Final validation
+            if (thumbnailFile.size === 0) {
+              reject(new Error('Thumbnail file has 0 bytes after creation'));
+              return;
+            }
+            
             resolve(thumbnailFile);
           } else {
-            reject(new Error('Failed to create thumbnail'));
+            reject(new Error('Failed to create thumbnail blob'));
           }
         },
         'image/jpeg',
@@ -225,7 +274,20 @@ export async function createThumbnail(file: File, maxWidth: number = 200, maxHei
       );
     };
     
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = URL.createObjectURL(file);
+    img.onerror = (e) => {
+      clearTimeout(timeoutId);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load image'));
+    };
+
+    // Set the image source
+    try {
+      objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
+      
+    } catch (err) {
+      clearTimeout(timeoutId);
+      reject(new Error('Failed to set image source'));
+    }
   });
 } 
