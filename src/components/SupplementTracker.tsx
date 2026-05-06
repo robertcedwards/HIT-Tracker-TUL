@@ -1489,9 +1489,6 @@ export function SupplementTracker() {
       setSuccessMessage('Supplement added successfully!');
       setTimeout(() => setSuccessMessage(null), 3000);
 
-      // Store the thumbnail URL for display in the modal
-      const _thumbnailUrl = newSupplement.thumbnailUrl;
-      
       // Close modals and reset state
       setShowExtractionPreview(false);
       setExtractionResult(null);

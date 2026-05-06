@@ -55,7 +55,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
     // Force play after a short delay as fallback
     setTimeout(() => {
       if (videoElement && videoElement.paused) {
-        videoElement.play().catch(err => {
+        videoElement.play().catch(_err => {
           // Silent fail
         });
       }
@@ -75,14 +75,14 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
     };
     
     // Try to play immediately as well
-    videoElement.play().catch(err => {
+    videoElement.play().catch(_err => {
       // Silent fail, will retry
     });
     
     // Additional fallback - try again after video is ready
     videoElement.oncanplay = () => {
       if (videoElement && videoElement.paused) {
-        videoElement.play().catch(err => {
+        videoElement.play().catch(_err => {
           // Silent fail
         });
       }
