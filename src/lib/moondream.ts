@@ -274,7 +274,7 @@ export async function createThumbnail(file: File, maxWidth: number = 200, maxHei
       );
     };
     
-    img.onerror = (e) => {
+    img.onerror = (_e) => {
       clearTimeout(timeoutId);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       reject(new Error('Failed to load image'));

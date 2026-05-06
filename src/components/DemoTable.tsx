@@ -33,7 +33,7 @@ export function DemoTable() {
   };
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     
     if (activeTimer) {
       interval = setInterval(() => {

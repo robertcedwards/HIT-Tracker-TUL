@@ -24,7 +24,7 @@ export function ExtractionPreviewModal({
   const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [imageLoadError, setImageLoadError] = useState<string | null>(null);
-  const imageLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const imageLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Generate thumbnail preview
   React.useEffect(() => {
@@ -73,7 +73,7 @@ export function ExtractionPreviewModal({
         }
       };
       
-      reader.onerror = (e) => {
+      reader.onerror = (_e) => {
         setThumbnailPreview('');
         setIsImageLoading(false);
         setImageLoadError('Failed to read file');
@@ -238,7 +238,7 @@ export function ExtractionPreviewModal({
                       imageLoadTimeoutRef.current = null;
                     }
                   }}
-                  onError={(e) => {
+                  onError={(_e) => {
                     setIsImageLoading(false);
                     setImageLoadError('Failed to load image');
                     

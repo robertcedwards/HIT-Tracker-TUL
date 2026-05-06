@@ -47,7 +47,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
   const setupVideoEventListeners = (videoElement: HTMLVideoElement) => {
     // Wait for video to load and play
     videoElement.onloadedmetadata = () => {
-      videoElement.play().catch(err => {
+      videoElement.play().catch(_err => {
         // Silent fail
       });
     };
@@ -69,7 +69,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
       setIsVideoPlaying(true);
     };
     
-    videoElement.onerror = (err) => {
+    videoElement.onerror = (_err) => {
       setIsCameraLoading(false);
       setIsVideoPlaying(false);
     };
@@ -496,7 +496,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                         className="w-full h-64 object-cover rounded-lg border-2 border-blue-500"
                         onClick={() => {
                           if (videoRef.current && videoRef.current.paused) {
-                            videoRef.current.play().catch(err => {
+                            videoRef.current.play().catch(_err => {
                               // Silent fail
                             });
                           }
@@ -593,7 +593,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onExtractionComplete }: Pho
                         setIsImageLoading(false);
                         setError(null);
                       }}
-                      onError={(e) => {
+                      onError={(_e) => {
                         setIsImageLoading(false);
                         setError('Failed to load image preview. The file may be corrupted.');
                         // Try to fallback to showing just the file info

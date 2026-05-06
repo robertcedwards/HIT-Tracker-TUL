@@ -1490,7 +1490,7 @@ export function SupplementTracker() {
       setTimeout(() => setSuccessMessage(null), 3000);
 
       // Store the thumbnail URL for display in the modal
-      const thumbnailUrl = newSupplement.thumbnailUrl;
+      const _thumbnailUrl = newSupplement.thumbnailUrl;
       
       // Close modals and reset state
       setShowExtractionPreview(false);
@@ -1536,7 +1536,7 @@ export function SupplementTracker() {
   useEffect(() => {
     if (!showCamera || !videoRef.current) return;
     let cancelled = false;
-    let timeoutId: NodeJS.Timeout | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     
     const onDetected = (result: any) => {
       if (cancelled) return;
