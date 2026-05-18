@@ -13,7 +13,7 @@ export type AgentStreamEvent =
 
 export type AgentStreamHandler = (event: AgentStreamEvent) => void;
 
-const ENDPOINT = '/api/agent-chat';
+const ENDPOINT = '/.netlify/functions/agent-chat';
 
 export async function streamAgentChat(
   messages: AgentMessage[],
