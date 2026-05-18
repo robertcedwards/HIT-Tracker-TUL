@@ -14,6 +14,7 @@ import { Terms } from './components/Terms'
 import { ProfilePage } from './components/ProfilePage'
 import { WeightUnitProvider } from './contexts/WeightUnitContext'
 import { SupplementTracker } from './components/SupplementTracker';
+import { AgentChat } from './components/AgentChat';
 
 function App() {
   const [showModal, setShowModal] = useState(false)
@@ -159,6 +160,7 @@ function App() {
             )
           } />
         </Routes>
+        {session && <AgentChat />}
       </Router>
     </WeightUnitProvider>
   );
