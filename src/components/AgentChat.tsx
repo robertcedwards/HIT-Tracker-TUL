@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MessageCircle, Send, X, Loader2, Wrench } from 'lucide-react';
-import { streamAgentChat, AgentMessage } from '../lib/agentClient';
+import { sendAgentChat, AgentMessage } from '../lib/agentClient';
 
 type ChatTurn =
   | { role: 'user'; text: string }
@@ -43,30 +43,19 @@ export function AgentChat() {
     abortRef.current = controller;
 
     try {
-      await streamAgentChat(history, (event) => {
-        setTurns((prev) => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1];
-          if (!last || last.role !== 'assistant') return prev;
-          if (event.type === 'text') {
-            copy[copy.length - 1] = { ...last, text: last.text + event.delta };
-          } else if (event.type === 'tool_use') {
-            copy[copy.length - 1] = {
-              ...last,
-              toolCalls: [...last.toolCalls, event.name],
-            };
-          } else if (event.type === 'done') {
-            copy[copy.length - 1] = { ...last, pending: false };
-          } else if (event.type === 'error') {
-            copy[copy.length - 1] = {
-              ...last,
-              text: last.text + (last.text ? '\n\n' : '') + `⚠️ ${event.message}`,
-              pending: false,
-            };
-          }
-          return copy;
-        });
-      }, controller.signal);
+      const reply = await sendAgentChat(history, controller.signal);
+      setTurns((prev) => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (!last || last.role !== 'assistant') return prev;
+        copy[copy.length - 1] = {
+          ...last,
+          text: reply.text,
+          toolCalls: reply.toolCalls.map((c) => c.name),
+          pending: false,
+        };
+        return copy;
+      });
     } catch (err) {
       setTurns((prev) => {
         const copy = [...prev];
@@ -74,7 +63,7 @@ export function AgentChat() {
         if (last && last.role === 'assistant') {
           copy[copy.length - 1] = {
             ...last,
-            text: last.text + `\n\n⚠️ ${err instanceof Error ? err.message : 'Request failed'}`,
+            text: `⚠️ ${err instanceof Error ? err.message : 'Request failed'}`,
             pending: false,
           };
         }

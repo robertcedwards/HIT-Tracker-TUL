@@ -75,8 +75,6 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-// Add cache_control to the LAST tool so tools + system are cached together.
-// (Tools render before system; the breakpoint on the last system block caches both.)
 const CACHED_TOOLS: Anthropic.Tool[] = TOOLS.map((t, i) =>
   i === TOOLS.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t,
 );
@@ -240,137 +238,117 @@ async function runTool(
   }
 }
 
-function sse(event: string, data: unknown): Uint8Array {
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  return new TextEncoder().encode(payload);
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+function json(statusCode: number, body: unknown) {
+  return {
+    statusCode,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
 }
 
-export default async (req: Request): Promise<Response> => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    });
+export const handler = async (event: any) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: CORS_HEADERS, body: '' };
   }
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  if (event.httpMethod !== 'POST') {
+    return json(405, { error: 'Method not allowed' });
   }
 
-  if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), { status: 500 });
-  }
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
-  }
+  if (!ANTHROPIC_API_KEY) return json(500, { error: 'ANTHROPIC_API_KEY not configured' });
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json(500, { error: 'Supabase env vars not configured' });
 
-  const authHeader = req.headers.get('authorization') ?? '';
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!jwt) return new Response(JSON.stringify({ error: 'Missing bearer token' }), { status: 401 });
+  if (!jwt) return json(401, { error: 'Missing bearer token' });
 
-  // Build a Supabase client scoped to the user's JWT so RLS enforces user isolation.
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
   const { data: userData, error: userErr } = await supabase.auth.getUser(jwt);
-  if (userErr || !userData.user) {
-    return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401 });
-  }
+  if (userErr || !userData.user) return json(401, { error: 'Invalid token' });
   const userId = userData.user.id;
 
-  let body: { messages?: Anthropic.MessageParam[] };
+  let parsed: { messages?: Anthropic.MessageParam[] };
   try {
-    body = await req.json();
+    parsed = JSON.parse(event.body || '{}');
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+    return json(400, { error: 'Invalid JSON' });
   }
-  const messages = body.messages ?? [];
+  const messages = parsed.messages ?? [];
   if (!Array.isArray(messages) || messages.length === 0) {
-    return new Response(JSON.stringify({ error: 'messages required' }), { status: 400 });
+    return json(400, { error: 'messages required' });
   }
 
   const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+  const convo: Anthropic.MessageParam[] = [...messages];
+  const toolCalls: { name: string; input: unknown }[] = [];
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const send = (event: string, data: unknown) => controller.enqueue(sse(event, data));
-      const convo: Anthropic.MessageParam[] = [...messages];
+  try {
+    let safety = 0;
+    while (safety++ < 8) {
+      const resp = await client.messages.create({
+        model: MODEL,
+        max_tokens: 4096,
+        system: CACHED_SYSTEM,
+        tools: CACHED_TOOLS,
+        messages: convo,
+      });
 
-      try {
-        let safety = 0;
-        while (safety++ < 8) {
-          const turn = client.messages.stream({
-            model: MODEL,
-            max_tokens: 4096,
-            system: CACHED_SYSTEM,
-            tools: CACHED_TOOLS,
-            messages: convo,
-          });
+      if (resp.stop_reason === 'tool_use') {
+        const toolUses = resp.content.filter(
+          (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
+        );
+        convo.push({ role: 'assistant', content: resp.content });
 
-          turn.on('text', (delta) => send('text', { delta }));
-
-          const finalMessage = await turn.finalMessage();
-
-          if (finalMessage.stop_reason === 'tool_use') {
-            const toolUses = finalMessage.content.filter(
-              (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
-            );
-            convo.push({ role: 'assistant', content: finalMessage.content });
-
-            const results: Anthropic.ToolResultBlockParam[] = [];
-            for (const tu of toolUses) {
-              send('tool_use', { name: tu.name, input: tu.input });
-              try {
-                const out = await runTool(tu.name, tu.input as Record<string, unknown>, supabase, userId);
-                results.push({
-                  type: 'tool_result',
-                  tool_use_id: tu.id,
-                  content: JSON.stringify(out),
-                });
-              } catch (err) {
-                results.push({
-                  type: 'tool_result',
-                  tool_use_id: tu.id,
-                  content: `Error: ${err instanceof Error ? err.message : String(err)}`,
-                  is_error: true,
-                });
-              }
-            }
-            convo.push({ role: 'user', content: results });
-            continue;
+        const results: Anthropic.ToolResultBlockParam[] = [];
+        for (const tu of toolUses) {
+          toolCalls.push({ name: tu.name, input: tu.input });
+          try {
+            const out = await runTool(tu.name, tu.input as Record<string, unknown>, supabase, userId);
+            results.push({
+              type: 'tool_result',
+              tool_use_id: tu.id,
+              content: JSON.stringify(out),
+            });
+          } catch (err) {
+            results.push({
+              type: 'tool_result',
+              tool_use_id: tu.id,
+              content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+              is_error: true,
+            });
           }
-
-          send('done', {
-            stop_reason: finalMessage.stop_reason,
-            usage: finalMessage.usage,
-          });
-          break;
         }
-      } catch (err) {
-        if (err instanceof Anthropic.APIError) {
-          send('error', { status: err.status, message: err.message });
-        } else {
-          send('error', { message: err instanceof Error ? err.message : String(err) });
-        }
-      } finally {
-        controller.close();
+        convo.push({ role: 'user', content: results });
+        continue;
       }
-    },
-  });
 
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'X-Accel-Buffering': 'no',
-    },
-  });
+      const text = resp.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n');
+
+      return json(200, {
+        text,
+        tool_calls: toolCalls,
+        stop_reason: resp.stop_reason,
+        usage: resp.usage,
+      });
+    }
+
+    return json(500, { error: 'Agent loop hit safety cap' });
+  } catch (err) {
+    if (err instanceof Anthropic.APIError) {
+      return json(err.status ?? 500, { error: err.message });
+    }
+    return json(500, { error: err instanceof Error ? err.message : String(err) });
+  }
 };
