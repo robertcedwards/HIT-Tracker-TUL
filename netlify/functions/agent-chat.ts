@@ -1,3 +1,4 @@
+import type { Handler } from '@netlify/functions';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
@@ -252,7 +253,7 @@ function json(statusCode: number, body: unknown) {
   };
 }
 
-export const handler = async (event: any) => {
+export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS_HEADERS, body: '' };
   }
