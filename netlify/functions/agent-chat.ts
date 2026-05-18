@@ -374,5 +374,3 @@ export default async (req: Request): Promise<Response> => {
     },
   });
 };
-
-export const config = { path: '/api/agent-chat' };
