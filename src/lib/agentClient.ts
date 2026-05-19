@@ -5,27 +5,22 @@ export type AgentMessage = {
   content: string;
 };
 
-export type AgentStreamEvent =
-  | { type: 'text'; delta: string }
-  | { type: 'tool_use'; name: string; input: unknown }
-  | { type: 'done'; stop_reason: string | null; usage: unknown }
-  | { type: 'error'; message: string; status?: number };
+export type AgentToolCall = { name: string; input: unknown };
 
-export type AgentStreamHandler = (event: AgentStreamEvent) => void;
+export type AgentReply = {
+  text: string;
+  toolCalls: AgentToolCall[];
+};
 
-const ENDPOINT = '/api/agent-chat';
+const ENDPOINT = '/.netlify/functions/agent-chat';
 
-export async function streamAgentChat(
+export async function sendAgentChat(
   messages: AgentMessage[],
-  onEvent: AgentStreamHandler,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<AgentReply> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) {
-    onEvent({ type: 'error', message: 'Not signed in.' });
-    return;
-  }
+  if (!token) throw new Error('Not signed in.');
 
   const res = await fetch(ENDPOINT, {
     method: 'POST',
@@ -37,65 +32,12 @@ export async function streamAgentChat(
     signal,
   });
 
-  if (!res.ok || !res.body) {
-    let msg = `Request failed (${res.status})`;
-    try {
-      const j = await res.json();
-      if (j?.error) msg = j.error;
-    } catch {
-      /* ignore */
-    }
-    onEvent({ type: 'error', message: msg, status: res.status });
-    return;
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload?.error || `Request failed (${res.status})`);
   }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    // SSE events are separated by a blank line.
-    let idx: number;
-    while ((idx = buffer.indexOf('\n\n')) !== -1) {
-      const raw = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
-      parseAndEmit(raw, onEvent);
-    }
-  }
-
-  if (buffer.trim()) parseAndEmit(buffer, onEvent);
-}
-
-function parseAndEmit(raw: string, onEvent: AgentStreamHandler): void {
-  let event = 'message';
-  let data = '';
-  for (const line of raw.split('\n')) {
-    if (line.startsWith('event:')) event = line.slice(6).trim();
-    else if (line.startsWith('data:')) data += line.slice(5).trim();
-  }
-  if (!data) return;
-  let parsed: any;
-  try {
-    parsed = JSON.parse(data);
-  } catch {
-    return;
-  }
-  switch (event) {
-    case 'text':
-      onEvent({ type: 'text', delta: parsed.delta ?? '' });
-      break;
-    case 'tool_use':
-      onEvent({ type: 'tool_use', name: parsed.name, input: parsed.input });
-      break;
-    case 'done':
-      onEvent({ type: 'done', stop_reason: parsed.stop_reason ?? null, usage: parsed.usage });
-      break;
-    case 'error':
-      onEvent({ type: 'error', message: parsed.message ?? 'Unknown error', status: parsed.status });
-      break;
-  }
+  return {
+    text: payload.text ?? '',
+    toolCalls: payload.tool_calls ?? [],
+  };
 }

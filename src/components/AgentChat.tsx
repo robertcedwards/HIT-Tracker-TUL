@@ -1,16 +1,51 @@
 import { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Send, X, Loader2, Wrench } from 'lucide-react';
-import { streamAgentChat, AgentMessage } from '../lib/agentClient';
+import { MessageCircle, Send, X, Loader2, Wrench, PanelLeft, PanelRight, Move } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { sendAgentChat, AgentMessage } from '../lib/agentClient';
 
 type ChatTurn =
   | { role: 'user'; text: string }
   | { role: 'assistant'; text: string; toolCalls: string[]; pending: boolean };
+
+type ChatMode = 'floating' | 'left' | 'right';
+
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 720;
+const DEFAULT_WIDTH = 420;
+const MOBILE_BREAKPOINT = 768;
+
+function loadPref<T>(key: string, fallback: T, parse: (raw: string) => T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw == null ? fallback : parse(raw);
+  } catch {
+    return fallback;
+  }
+}
 
 export function AgentChat() {
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<ChatMode>(() =>
+    loadPref<ChatMode>('agentChat.mode', 'floating', (raw) =>
+      raw === 'left' || raw === 'right' ? raw : 'floating',
+    ),
+  );
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() =>
+    loadPref('agentChat.width', DEFAULT_WIDTH, (raw) => {
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n)) return DEFAULT_WIDTH;
+      return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, n));
+    }),
+  );
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT,
+  );
+
   const abortRef = useRef<AbortController | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
@@ -18,9 +53,31 @@ export function AgentChat() {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight });
   }, [turns]);
 
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   useEffect(() => {
-    return () => abortRef.current?.abort();
+    try {
+      window.localStorage.setItem('agentChat.mode', mode);
+    } catch {
+      /* ignore */
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('agentChat.width', String(sidebarWidth));
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  const effectiveMode: ChatMode = isMobile ? 'floating' : mode;
 
   const send = async () => {
     const text = input.trim();
@@ -43,30 +100,19 @@ export function AgentChat() {
     abortRef.current = controller;
 
     try {
-      await streamAgentChat(history, (event) => {
-        setTurns((prev) => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1];
-          if (!last || last.role !== 'assistant') return prev;
-          if (event.type === 'text') {
-            copy[copy.length - 1] = { ...last, text: last.text + event.delta };
-          } else if (event.type === 'tool_use') {
-            copy[copy.length - 1] = {
-              ...last,
-              toolCalls: [...last.toolCalls, event.name],
-            };
-          } else if (event.type === 'done') {
-            copy[copy.length - 1] = { ...last, pending: false };
-          } else if (event.type === 'error') {
-            copy[copy.length - 1] = {
-              ...last,
-              text: last.text + (last.text ? '\n\n' : '') + `⚠️ ${event.message}`,
-              pending: false,
-            };
-          }
-          return copy;
-        });
-      }, controller.signal);
+      const reply = await sendAgentChat(history, controller.signal);
+      setTurns((prev) => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (!last || last.role !== 'assistant') return prev;
+        copy[copy.length - 1] = {
+          ...last,
+          text: reply.text,
+          toolCalls: reply.toolCalls.map((c) => c.name),
+          pending: false,
+        };
+        return copy;
+      });
     } catch (err) {
       setTurns((prev) => {
         const copy = [...prev];
@@ -74,7 +120,7 @@ export function AgentChat() {
         if (last && last.role === 'assistant') {
           copy[copy.length - 1] = {
             ...last,
-            text: last.text + `\n\n⚠️ ${err instanceof Error ? err.message : 'Request failed'}`,
+            text: `⚠️ ${err instanceof Error ? err.message : 'Request failed'}`,
             pending: false,
           };
         }
@@ -84,6 +130,28 @@ export function AgentChat() {
       setBusy(false);
       abortRef.current = null;
     }
+  };
+
+  const startResize = (e: React.MouseEvent) => {
+    if (effectiveMode === 'floating') return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    const onMove = (ev: MouseEvent) => {
+      const delta = effectiveMode === 'right' ? startX - ev.clientX : ev.clientX - startX;
+      const next = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta));
+      setSidebarWidth(next);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
   if (!open) {
@@ -99,20 +167,76 @@ export function AgentChat() {
     );
   }
 
+  const containerClass =
+    effectiveMode === 'floating'
+      ? 'fixed bottom-6 right-6 z-40 w-[min(420px,calc(100vw-2rem))] h-[min(640px,calc(100vh-3rem))] rounded-3xl shadow-2xl shadow-blue-200 border border-blue-100'
+      : effectiveMode === 'left'
+      ? 'fixed top-0 left-0 z-40 h-screen border-r border-blue-100 shadow-xl shadow-blue-200'
+      : 'fixed top-0 right-0 z-40 h-screen border-l border-blue-100 shadow-xl shadow-blue-200';
+
+  const containerStyle =
+    effectiveMode === 'floating' ? undefined : { width: `${sidebarWidth}px` };
+
   return (
-    <div className="fixed bottom-6 right-6 z-40 w-[min(420px,calc(100vw-2rem))] h-[min(640px,calc(100vh-3rem))] flex flex-col bg-white rounded-3xl shadow-2xl shadow-blue-200 border border-blue-100 overflow-hidden">
+    <div
+      className={`${containerClass} flex flex-col bg-white overflow-hidden`}
+      style={containerStyle}
+    >
+      {/* Resize handle on the inner edge in sidebar mode */}
+      {effectiveMode !== 'floating' && (
+        <div
+          onMouseDown={startResize}
+          className={`absolute top-0 ${
+            effectiveMode === 'left' ? 'right-0' : 'left-0'
+          } w-1.5 h-full cursor-col-resize hover:bg-blue-200/60 active:bg-blue-300/60 z-10`}
+          title="Drag to resize"
+        />
+      )}
+
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-blue-500 to-purple-500 text-white">
         <div className="flex items-center gap-2">
           <MessageCircle size={18} />
           <span className="font-semibold text-sm">Hit Flow Coach</span>
         </div>
-        <button
-          onClick={() => setOpen(false)}
-          className="p-1 rounded-full hover:bg-white/20"
-          aria-label="Close chat"
-        >
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          {!isMobile && (
+            <>
+              <button
+                onClick={() => setMode(mode === 'left' ? 'floating' : 'left')}
+                className={`p-1 rounded ${mode === 'left' ? 'bg-white/30' : 'hover:bg-white/20'}`}
+                title="Dock left"
+                aria-label="Dock left"
+              >
+                <PanelLeft size={16} />
+              </button>
+              <button
+                onClick={() => setMode(mode === 'right' ? 'floating' : 'right')}
+                className={`p-1 rounded ${mode === 'right' ? 'bg-white/30' : 'hover:bg-white/20'}`}
+                title="Dock right"
+                aria-label="Dock right"
+              >
+                <PanelRight size={16} />
+              </button>
+              {mode !== 'floating' && (
+                <button
+                  onClick={() => setMode('floating')}
+                  className="p-1 rounded hover:bg-white/20"
+                  title="Float"
+                  aria-label="Float"
+                >
+                  <Move size={16} />
+                </button>
+              )}
+            </>
+          )}
+          <button
+            onClick={() => setOpen(false)}
+            className="p-1 rounded-full hover:bg-white/20"
+            aria-label="Close chat"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       <div ref={scrollerRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
@@ -129,9 +253,9 @@ export function AgentChat() {
         {turns.map((t, i) => (
           <div
             key={i}
-            className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+            className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
               t.role === 'user'
-                ? 'ml-auto bg-blue-600 text-white'
+                ? 'ml-auto bg-blue-600 text-white whitespace-pre-wrap'
                 : 'mr-auto bg-gray-100 text-gray-900'
             }`}
           >
@@ -148,9 +272,89 @@ export function AgentChat() {
                 ))}
               </div>
             )}
-            {t.text || (t.role === 'assistant' && t.pending && (
-              <Loader2 size={14} className="animate-spin text-gray-400" />
-            ))}
+            {t.role === 'assistant' ? (
+              t.text ? (
+                <div className="prose-chat">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ node, ...props }) => (
+                        <a
+                          {...props}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-blue-600 underline"
+                        />
+                      ),
+                      table: ({ node, ...props }) => (
+                        <table
+                          {...props}
+                          className="my-2 text-xs border-collapse border border-gray-300"
+                        />
+                      ),
+                      th: ({ node, ...props }) => (
+                        <th
+                          {...props}
+                          className="border border-gray-300 bg-gray-50 px-2 py-1 text-left font-semibold"
+                        />
+                      ),
+                      td: ({ node, ...props }) => (
+                        <td {...props} className="border border-gray-300 px-2 py-1" />
+                      ),
+                      code: ({ node, className, children, ...props }) => {
+                        const inline = !className;
+                        return inline ? (
+                          <code
+                            {...props}
+                            className="bg-gray-200 text-gray-800 px-1 py-0.5 rounded text-[0.85em]"
+                          >
+                            {children}
+                          </code>
+                        ) : (
+                          <code {...props} className={className}>
+                            {children}
+                          </code>
+                        );
+                      },
+                      pre: ({ node, ...props }) => (
+                        <pre
+                          {...props}
+                          className="my-2 bg-gray-900 text-gray-100 p-2 rounded-md text-xs overflow-x-auto"
+                        />
+                      ),
+                      ul: ({ node, ...props }) => (
+                        <ul {...props} className="list-disc pl-5 my-1 space-y-0.5" />
+                      ),
+                      ol: ({ node, ...props }) => (
+                        <ol {...props} className="list-decimal pl-5 my-1 space-y-0.5" />
+                      ),
+                      p: ({ node, ...props }) => <p {...props} className="my-1" />,
+                      h1: ({ node, ...props }) => (
+                        <h1 {...props} className="text-base font-bold mt-2 mb-1" />
+                      ),
+                      h2: ({ node, ...props }) => (
+                        <h2 {...props} className="text-sm font-bold mt-2 mb-1" />
+                      ),
+                      h3: ({ node, ...props }) => (
+                        <h3 {...props} className="text-sm font-semibold mt-1.5 mb-1" />
+                      ),
+                      blockquote: ({ node, ...props }) => (
+                        <blockquote
+                          {...props}
+                          className="border-l-2 border-gray-300 pl-3 my-1 text-gray-700"
+                        />
+                      ),
+                    }}
+                  >
+                    {t.text}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                t.pending && <Loader2 size={14} className="animate-spin text-gray-400" />
+              )
+            ) : (
+              t.text
+            )}
           </div>
         ))}
       </div>
