@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import ws from 'ws';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -271,6 +272,7 @@ export const handler: Handler = async (event) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: ws as any },
   });
 
   const { data: userData, error: userErr } = await supabase.auth.getUser(jwt);
