@@ -220,7 +220,7 @@ async function runTool(
       const days = clampDays(input.days, 14, 365);
       const since = isoDaysAgo(days);
       const { data, error } = await supabase
-        .from('supplement_usage')
+        .from('supplement_usages')
         .select('timestamp, dosage_mg, user_supplements:user_supplement_id(supplements:supplement_id(name, brand))')
         .eq('user_id', userId)
         .gte('timestamp', since)
