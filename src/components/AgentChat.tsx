@@ -33,6 +33,13 @@ import {
   removeFavorite,
   saveMessage,
 } from '../lib/chatHistory';
+import {
+  loadExerciseOptions,
+  loadSupplementOptions,
+  METRICS,
+  SlotKind,
+  TIME_WINDOWS,
+} from '../lib/promptOptions';
 import type { ChatFavorite, ChatThreadMeta, StoredToolCall } from '../types/Chat';
 
 type ChatTurn =
@@ -64,6 +71,80 @@ const EXAMPLE_PROMPTS = [
   'Which lift has improved the most recently?',
 ];
 
+type SlotDef = { kind: SlotKind; defaultValue?: string };
+type TemplatePart = string | SlotDef;
+type PromptTemplate = { id: string; parts: TemplatePart[] };
+
+const TEMPLATES: PromptTemplate[] = [
+  {
+    id: 'progress',
+    parts: [
+      'How is my ',
+      { kind: 'exercise' },
+      ' progressing over ',
+      { kind: 'time_window', defaultValue: 'the last 30 days' },
+      '?',
+    ],
+  },
+  {
+    id: 'compare',
+    parts: [
+      'Compare my ',
+      { kind: 'exercise' },
+      ' and ',
+      { kind: 'exercise' },
+      ' progression.',
+    ],
+  },
+  {
+    id: 'metric',
+    parts: [
+      "What's my ",
+      { kind: 'metric', defaultValue: 'heaviest weight' },
+      ' for ',
+      { kind: 'exercise' },
+      ' over ',
+      { kind: 'time_window', defaultValue: 'this year' },
+      '?',
+    ],
+  },
+  {
+    id: 'supplement-impact',
+    parts: [
+      'How were my workouts affected by my ',
+      { kind: 'supplement' },
+      ' intake over ',
+      { kind: 'time_window', defaultValue: 'the last 30 days' },
+      '?',
+    ],
+  },
+  {
+    id: 'consistency',
+    parts: [
+      'How consistent has my ',
+      { kind: 'supplement' },
+      ' intake been over ',
+      { kind: 'time_window', defaultValue: 'the last 14 days' },
+      '?',
+    ],
+  },
+  {
+    id: 'heaviest-window',
+    parts: [
+      'Show me my heaviest lifts over ',
+      { kind: 'time_window', defaultValue: 'this quarter' },
+      '.',
+    ],
+  },
+];
+
+const SLOT_LABELS: Record<SlotKind, string> = {
+  exercise: 'exercise',
+  supplement: 'supplement',
+  time_window: 'time window',
+  metric: 'metric',
+};
+
 function loadPref<T>(key: string, fallback: T, parse: (raw: string) => T): T {
   if (typeof window === 'undefined') return fallback;
   try {
@@ -93,6 +174,8 @@ export function AgentChat() {
   const [favorites, setFavorites] = useState<ChatFavorite[]>([]);
   const [recentThreads, setRecentThreads] = useState<ChatThreadMeta[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [exerciseOptions, setExerciseOptions] = useState<string[]>([]);
+  const [supplementOptions, setSupplementOptions] = useState<string[]>([]);
 
   const [mode, setMode] = useState<ChatMode>(() =>
     loadPref<ChatMode>('agentChat.mode', 'floating', (raw) =>
@@ -144,9 +227,16 @@ export function AgentChat() {
 
   const refreshSideData = useCallback(async () => {
     try {
-      const [favs, threads] = await Promise.all([listFavorites(), listRecentThreads()]);
+      const [favs, threads, exercises, supplements] = await Promise.all([
+        listFavorites(),
+        listRecentThreads(),
+        loadExerciseOptions(),
+        loadSupplementOptions(),
+      ]);
       setFavorites(favs);
       setRecentThreads(threads);
+      setExerciseOptions(exercises);
+      setSupplementOptions(supplements);
     } catch (err) {
       console.error('Failed to load chat side data', err);
     }
@@ -433,6 +523,8 @@ export function AgentChat() {
           <WelcomeView
             favorites={favorites}
             recentThreads={recentThreads}
+            exerciseOptions={exerciseOptions}
+            supplementOptions={supplementOptions}
             onPick={pickPrompt}
             onToggleFavorite={toggleFavorite}
             onOpenThread={openThread}
@@ -483,12 +575,36 @@ export function AgentChat() {
 function WelcomeView(props: {
   favorites: ChatFavorite[];
   recentThreads: ChatThreadMeta[];
+  exerciseOptions: string[];
+  supplementOptions: string[];
   onPick: (prompt: string) => void;
   onToggleFavorite: (prompt: string) => void;
   onOpenThread: (id: string) => void;
 }) {
-  const { favorites, recentThreads, onPick, onToggleFavorite, onOpenThread } = props;
+  const {
+    favorites,
+    recentThreads,
+    exerciseOptions,
+    supplementOptions,
+    onPick,
+    onToggleFavorite,
+    onOpenThread,
+  } = props;
   const favSet = new Set(favorites.map((f) => f.prompt));
+
+  const optionsForKind = (kind: SlotKind): string[] => {
+    switch (kind) {
+      case 'exercise':
+        return exerciseOptions;
+      case 'supplement':
+        return supplementOptions;
+      case 'time_window':
+        return TIME_WINDOWS;
+      case 'metric':
+        return METRICS;
+    }
+  };
+
   return (
     <div className="px-4 py-4 space-y-5 text-sm">
       <div>
@@ -511,20 +627,55 @@ function WelcomeView(props: {
 
       <section>
         <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
-          Try one
+          Quick prompts
         </h3>
-        <ul className="space-y-1">
-          {EXAMPLE_PROMPTS.map((p) => (
-            <li key={p}>
-              <PromptRow
-                text={p}
-                favorited={favSet.has(p)}
-                onPick={() => onPick(p)}
-                onToggleFavorite={() => onToggleFavorite(p)}
-              />
-            </li>
+        <div className="flex flex-wrap gap-1.5">
+          {EXAMPLE_PROMPTS.map((p) => {
+            const isFav = favSet.has(p);
+            return (
+              <span
+                key={p}
+                className="group inline-flex items-center gap-1 text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full pl-2 pr-1 py-0.5 transition-colors"
+              >
+                <button
+                  onClick={() => onPick(p)}
+                  className="text-left leading-tight max-w-[260px] truncate"
+                  title={p}
+                >
+                  {p}
+                </button>
+                <button
+                  onClick={() => onToggleFavorite(p)}
+                  className={`p-0.5 rounded-full ${
+                    isFav
+                      ? 'text-yellow-500'
+                      : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-gray-500'
+                  }`}
+                  title={isFav ? 'Remove from saved' : 'Save prompt'}
+                  aria-label={isFav ? 'Remove from saved' : 'Save prompt'}
+                >
+                  <Star size={11} fill={isFav ? 'currentColor' : 'none'} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+          Build a question
+        </h3>
+        <div className="space-y-2">
+          {TEMPLATES.map((t) => (
+            <TemplateCard
+              key={t.id}
+              template={t}
+              optionsForKind={optionsForKind}
+              onUse={onPick}
+            />
           ))}
-        </ul>
+        </div>
       </section>
 
       <section>
@@ -533,21 +684,33 @@ function WelcomeView(props: {
         </h3>
         {favorites.length === 0 ? (
           <p className="text-xs text-gray-400">
-            Star a prompt above or any question you ask to keep it here.
+            Star any prompt to keep it here for one-click reuse.
           </p>
         ) : (
-          <ul className="space-y-1">
+          <div className="flex flex-wrap gap-1.5">
             {favorites.map((f) => (
-              <li key={f.id}>
-                <PromptRow
-                  text={f.prompt}
-                  favorited
-                  onPick={() => onPick(f.prompt)}
-                  onToggleFavorite={() => onToggleFavorite(f.prompt)}
-                />
-              </li>
+              <span
+                key={f.id}
+                className="group inline-flex items-center gap-1 text-[11px] bg-yellow-50 hover:bg-yellow-100 text-yellow-900 border border-yellow-200 rounded-full pl-2 pr-1 py-0.5 transition-colors"
+              >
+                <button
+                  onClick={() => onPick(f.prompt)}
+                  className="text-left leading-tight max-w-[260px] truncate"
+                  title={f.prompt}
+                >
+                  {f.prompt}
+                </button>
+                <button
+                  onClick={() => onToggleFavorite(f.prompt)}
+                  className="p-0.5 rounded-full text-yellow-500 hover:text-yellow-700"
+                  title="Remove from saved"
+                  aria-label="Remove from saved"
+                >
+                  <Star size={11} fill="currentColor" />
+                </button>
+              </span>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
@@ -579,32 +742,113 @@ function WelcomeView(props: {
   );
 }
 
-function PromptRow(props: {
-  text: string;
-  favorited: boolean;
-  onPick: () => void;
-  onToggleFavorite: () => void;
+function TemplateCard(props: {
+  template: PromptTemplate;
+  optionsForKind: (kind: SlotKind) => string[];
+  onUse: (prompt: string) => void;
 }) {
+  const { template, optionsForKind, onUse } = props;
+  const slotIndexes = template.parts
+    .map((p, i) => (typeof p === 'string' ? null : i))
+    .filter((i): i is number => i !== null);
+
+  const [values, setValues] = useState<Record<number, string>>(() => {
+    const init: Record<number, string> = {};
+    for (const i of slotIndexes) {
+      const p = template.parts[i] as SlotDef;
+      if (p.defaultValue) init[i] = p.defaultValue;
+    }
+    return init;
+  });
+  const [openSlot, setOpenSlot] = useState<number | null>(null);
+
+  const buildPrompt = () =>
+    template.parts
+      .map((p, i) => {
+        if (typeof p === 'string') return p;
+        return values[i] || `[${SLOT_LABELS[p.kind]}]`;
+      })
+      .join('');
+
+  const setValue = (i: number, v: string) => {
+    setValues((prev) => ({ ...prev, [i]: v }));
+    setOpenSlot(null);
+  };
+
   return (
-    <div className="group flex items-center gap-1 rounded-lg hover:bg-gray-50">
-      <button
-        onClick={props.onPick}
-        className="flex-1 text-left px-2 py-1.5 text-gray-800 text-sm rounded-lg"
-      >
-        {props.text}
-      </button>
-      <button
-        onClick={props.onToggleFavorite}
-        className={`p-1.5 rounded-md ${
-          props.favorited
-            ? 'text-yellow-500'
-            : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-gray-500'
-        }`}
-        title={props.favorited ? 'Remove from saved' : 'Save prompt'}
-        aria-label={props.favorited ? 'Remove from saved' : 'Save prompt'}
-      >
-        {props.favorited ? <Star size={14} fill="currentColor" /> : <Star size={14} />}
-      </button>
+    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[13px] text-gray-800">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1 leading-snug">
+        {template.parts.map((part, i) => {
+          if (typeof part === 'string') return <span key={i}>{part}</span>;
+          const value = values[i];
+          const filled = !!value;
+          return (
+            <button
+              key={i}
+              onClick={() => setOpenSlot(openSlot === i ? null : i)}
+              className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] border transition-colors ${
+                filled
+                  ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200'
+                  : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 italic'
+              }`}
+              aria-label={`Choose ${SLOT_LABELS[part.kind]}`}
+            >
+              {filled ? value : SLOT_LABELS[part.kind]}
+              <span className="text-[9px] opacity-60">▾</span>
+            </button>
+          );
+        })}
+        <button
+          onClick={() => onUse(buildPrompt())}
+          className="ml-auto px-2 py-0.5 text-[11px] rounded-full bg-blue-600 text-white hover:bg-blue-700"
+          title="Use this prompt"
+        >
+          Use →
+        </button>
+      </div>
+      {openSlot !== null && (() => {
+        const part = template.parts[openSlot];
+        if (typeof part === 'string') return null;
+        const opts = optionsForKind(part.kind);
+        return (
+          <div className="mt-2 flex flex-wrap gap-1 border-t border-gray-100 pt-2">
+            {opts.length === 0 ? (
+              <span className="text-[11px] text-gray-400 italic">
+                No {SLOT_LABELS[part.kind]} options yet.
+              </span>
+            ) : (
+              opts.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setValue(openSlot, opt)}
+                  className={`text-[11px] rounded-full px-2 py-0.5 border transition-colors ${
+                    values[openSlot] === opt
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))
+            )}
+            {values[openSlot] && (
+              <button
+                onClick={() => {
+                  setValues((prev) => {
+                    const next = { ...prev };
+                    delete next[openSlot];
+                    return next;
+                  });
+                  setOpenSlot(null);
+                }}
+                className="text-[11px] rounded-full px-2 py-0.5 border border-gray-200 text-gray-500 hover:bg-gray-50"
+              >
+                clear
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
