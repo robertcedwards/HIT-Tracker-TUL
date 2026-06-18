@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { User, Settings, Download, Trash2, ArrowLeft } from 'lucide-react';
+import { User, Settings, Download, Trash2, ArrowLeft, Watch } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 import { getExercises } from '../lib/database';
+import { Device, listDevices, revokeDevice } from '../lib/devices';
 
 export function ProfilePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [userData, setUserData] = useState<any>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
 
   useEffect(() => {
     async function loadUserData() {
@@ -14,7 +16,25 @@ export function ProfilePage() {
       setUserData(user);
     }
     loadUserData();
+    loadDevices();
   }, []);
+
+  const loadDevices = async () => {
+    try {
+      setDevices(await listDevices());
+    } catch (error) {
+      console.error('Error loading devices:', error);
+    }
+  };
+
+  const handleRevokeDevice = async (id: string) => {
+    try {
+      await revokeDevice(id);
+      await loadDevices();
+    } catch (error) {
+      console.error('Error revoking device:', error);
+    }
+  };
 
   const handleExportData = async () => {
     try {
@@ -117,6 +137,50 @@ export function ProfilePage() {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Connected Devices */}
+        <div className="bg-white rounded-3xl shadow-lg shadow-blue-100 p-8 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-100 rounded-xl">
+              <Watch className="text-blue-500" size={20} />
+            </div>
+            <h2 className="text-xl font-semibold">Connected Devices</h2>
+          </div>
+
+          {devices.filter((d) => d.status !== 'revoked').length === 0 ? (
+            <p className="text-gray-600 text-sm">
+              No devices linked yet. On your Hit Flow hardware, scan the QR code it
+              displays to connect it to your account.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {devices
+                .filter((d) => d.status !== 'revoked')
+                .map((device) => (
+                  <div
+                    key={device.id}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl"
+                  >
+                    <div>
+                      <div className="font-medium text-gray-800">{device.name}</div>
+                      <div className="text-sm text-gray-500">
+                        {device.token_prefix}…
+                        {device.last_seen_at
+                          ? ` · last seen ${new Date(device.last_seen_at).toLocaleString()}`
+                          : ' · never used'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRevokeDevice(device.id)}
+                      className="px-4 py-2 text-sm text-red-700 bg-red-50 rounded-xl hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         {/* Data Management */}

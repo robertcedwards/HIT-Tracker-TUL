@@ -1,7 +1,7 @@
 import './index.css'
 import { ExerciseTable } from './components/ExerciseTable'
 import { Exercise } from './types/Exercise'
-import { Dumbbell, Info as InfoIcon, LogOut, User, PillBottle } from 'lucide-react'
+import { Dumbbell, Info as InfoIcon, LogOut, User, PillBottle, Watch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { InfoModal } from './components/InfoModal'
 import { AuthComponent } from './components/Auth'
@@ -14,6 +14,7 @@ import { Terms } from './components/Terms'
 import { ProfilePage } from './components/ProfilePage'
 import { WeightUnitProvider } from './contexts/WeightUnitContext'
 import { SupplementTracker } from './components/SupplementTracker';
+import { LinkDevice } from './components/LinkDevice';
 import { AgentChat } from './components/AgentChat';
 
 function App() {
@@ -80,6 +81,9 @@ function App() {
           <Route path="/supplements" element={
             session ? <SupplementTracker /> : <AuthComponent />
           } />
+          {/* LinkDevice handles its own auth state so it can resume the QR
+              pairing after sign-in (the ?code= stays in the URL). */}
+          <Route path="/link-device" element={<LinkDevice />} />
           <Route path="/" element={
             session ? (
               <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-x-hidden">
@@ -105,6 +109,13 @@ function App() {
                         >
                           <PillBottle size={16} />
                           <span>Supplements</span>
+                        </Link>
+                        <Link
+                          to="/link-device"
+                          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-2xl transition-colors text-sm"
+                        >
+                          <Watch size={16} />
+                          <span>Pair Device</span>
                         </Link>
                         <Link
                           to="/profile"
