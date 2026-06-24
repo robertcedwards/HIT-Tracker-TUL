@@ -16,6 +16,10 @@
 // royal-blue numerals/hands, vermilion batons + minute track, red triangle at
 // 12). The time-under-load timer is a live analog watch face. See the "Memovox
 // dial theme" section below.
+//
+// Easter egg: triple-tap button A on the exercise-select screen for a hidden
+// clock — full Memovox dial with hour/minute/second hands and "HitFlow.xyz",
+// kept accurate by the hardware RTC + occasional NTP sync. Any tap exits.
 
 #include <M5Unified.h>
 #include <WiFi.h>
@@ -23,8 +27,18 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include <time.h>
 
 #include "config.h"
+
+// NTP / timezone for the hidden clock mode. Override in config.h; defaults to US
+// Eastern. TZ_INFO is a POSIX TZ string (handles DST automatically).
+#ifndef NTP_SERVER
+#define NTP_SERVER "pool.ntp.org"
+#endif
+#ifndef TZ_INFO
+#define TZ_INFO "EST5EDT,M3.2.0,M11.1.0"
+#endif
 
 // ---------------------------------------------------------------------------
 // State
@@ -38,6 +52,7 @@ enum AppState {
   ST_CONFIRM,   // ready to submit
   ST_SENDING,
   ST_DONE,
+  ST_CLOCK,     // hidden NTP clock (triple-tap A)
 };
 
 static AppState state = ST_WIFI;
@@ -50,6 +65,8 @@ static String pairCode;            // short human code
 static const int MAX_EXERCISES = 32;
 static String exerciseIds[MAX_EXERCISES];
 static String exerciseNames[MAX_EXERCISES];
+static int    exerciseLastWeight[MAX_EXERCISES];  // last logged weight, -1 if none
+static int    exerciseLastTime[MAX_EXERCISES];    // last logged time-under-load (s)
 static int    exerciseCount = 0;
 static int    exerciseIdx = 0;
 
@@ -57,10 +74,15 @@ static int    weight = DEFAULT_WEIGHT;
 static uint32_t timerStartMs = 0;
 static uint32_t timerElapsedMs = 0;
 static bool   timerRunning = false;
+static bool   passedPrevBeeped = false;  // beeped once when we beat last time
 
 static uint32_t lastPollMs = 0;
 static uint32_t doneShownMs = 0;
 static int      lastHttpCode = 0;  // last apiRequest result, for on-screen diagnostics
+
+static bool     ntpDone = false;       // NTP has synced the RTC at least once
+static uint32_t lastNtpMs = 0;         // millis() of last successful NTP sync
+static uint32_t aTaps[3] = {0, 0, 0};  // recent BtnA click times (triple-tap easter egg)
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -124,6 +146,7 @@ static const uint16_t COL_RED      = RGB565(222, 78, 40);    // batons + accents
 static const uint16_t COL_STEEL    = RGB565(178, 180, 184);  // bezel
 static const uint16_t COL_STEEL_DK = RGB565(120, 122, 126);  // bezel edge
 static const uint16_t COL_TRACK    = RGB565(120, 122, 130);  // minute-track text
+static const uint16_t COL_YELLOW   = RGB565(240, 190, 20);   // physical A button (yellow)
 
 static M5Canvas canvas(&M5.Display);
 static bool canvasReady = false;
@@ -131,6 +154,14 @@ static int CX = 233, CY = 233, RAD = 233;  // set once the canvas exists
 
 static void beep() {
   M5.Speaker.tone(1760, 120);
+}
+
+// Distinct rising double-beep played once when the live time passes the previous
+// session's time-under-load.
+static void beepPassedPrev() {
+  M5.Speaker.tone(2349, 110);
+  delay(130);
+  M5.Speaker.tone(3136, 180);
 }
 
 // The Stopwatch's vibration motor sits behind the M5IOE1 expander; M5Unified
@@ -152,33 +183,97 @@ static void polar(float r, float deg, float& x, float& y) {
 }
 
 static void gText(const String& text, int y, const lgfx::IFont* font,
-                  uint16_t color, textdatum_t datum = middle_center, int x = -1) {
+                  uint16_t color, textdatum_t datum = middle_center, int x = -1,
+                  uint8_t size = 1) {
   canvas.setFont(font);
+  canvas.setTextSize(size);  // reset each call so a scaled value can't leak
   canvas.setTextDatum(datum);
   canvas.setTextColor(color);
   canvas.drawString(text, x < 0 ? CX : x, y);
 }
 
-// Brushed-steel bezel + warm-white dial + red triangle + "HIT FLOW" wordmark.
-// Shared backdrop for every screen so the device keeps the Memovox identity.
-static void drawBezelFace() {
+// Just the brushed-steel bezel + warm-white dial (no text). Building block for
+// every screen's backdrop.
+static void drawBareBezel() {
   canvas.fillSprite(COL_OFF);            // corners outside the round panel
   canvas.fillCircle(CX, CY, RAD - 1, COL_STEEL_DK);
   canvas.fillCircle(CX, CY, RAD - 7, COL_STEEL);
   canvas.fillCircle(CX, CY, RAD - 22, COL_DIAL);
+}
 
-  // Signature red alarm triangle near 12.
+// Signature red alarm triangle just inside 12.
+static void drawAlarmTriangle() {
   float tx, ty;
   polar(RAD * 0.30f, 0, tx, ty);
   canvas.fillTriangle(tx, ty - 10, tx - 9, ty + 7, tx + 9, ty + 7, COL_RED);
+}
 
+// Bezel + dial + triangle + centered "HIT FLOW" wordmark (used by the QR screen;
+// its center gets covered by the QR anyway).
+static void drawBezelFace() {
+  drawBareBezel();
+  drawAlarmTriangle();
   gText("HIT FLOW", CY - RAD * 0.18f, &fonts::FreeSansBold9pt7b, COL_BLUE);
   gText("MEMOVOX STYLE", CY - RAD * 0.10f, &fonts::Font0, COL_TRACK);
 }
 
-// Full Memovox dial: blue numerals, red batons, blue/red minute track.
+// Clean backdrop for the menu/status screens: bezel + white dial with the
+// "HIT FLOW" brand near the top — center is free for content.
+static void drawMenuBg() {
+  drawBareBezel();
+  gText("HIT FLOW", CY - RAD * 0.62f, &fonts::FreeSansBold12pt7b, COL_BLUE);
+}
+
+// Key-cap geometry: yellow A sits between the 10 and 11 o'clock ticks, blue B
+// between 1 and 2 — inset angularly so the red batons stay clear.
+static const float KEY_A_DEG = 315.0f;  // center of 10-11 o'clock
+static const float KEY_B_DEG = 45.0f;   // center of 1-2 o'clock
+static const float KEY_HALF = 11.0f;    // angular half-width
+static const float KEY_R_IN = 0.76f;    // inner edge (near numerals)
+static const float KEY_R_OUT = 0.95f;   // outer edge (up to the rim)
+static const float KEY_LABEL_R = 0.85f; // label radius (toward the outer edge)
+
+// A filled "key cap" between the ticks: domed toward the rim and tapered at the
+// ends — mimicking the physical button. Drawn as a fan of radial segments whose
+// length shrinks toward the angular ends (t^2 taper) so it comes to rounded
+// points, leaving the dial's tick marks clear.
+static void drawKeyCap(float center, uint16_t color) {
+  for (float d = center - KEY_HALF; d <= center + KEY_HALF + 0.01f; d += 0.4f) {
+    float t = (d - center) / KEY_HALF;                 // -1..1 across the cap
+    float ro = RAD * (KEY_R_OUT - 0.09f * t * t);      // domed outer edge
+    float ri = RAD * (KEY_R_IN + 0.06f * t * t);       // tapered inner edge
+    float ix, iy, ox, oy;
+    polar(ri, d, ix, iy);
+    polar(ro, d, ox, oy);
+    canvas.drawWideLine(ix, iy, ox, oy, 3, color);
+  }
+}
+
+static void drawKeyCaps() {
+  drawKeyCap(KEY_A_DEG, COL_YELLOW);
+  drawKeyCap(KEY_B_DEG, COL_BLUE);
+}
+
+// One primary label on a key cap, out toward the wide outer edge.
+static void drawKeyLabel(float deg, const String& label, uint16_t color) {
+  float x, y;
+  polar(RAD * KEY_LABEL_R, deg, x, y);
+  gText(label, (int)y, &fonts::FreeSansBold9pt7b, color, middle_center, (int)x);
+}
+
+// Both caps with their primary labels (dark on yellow A, white on blue B).
+static void drawKeys(const String& aLabel, const String& bLabel) {
+  drawKeyCaps();
+  drawKeyLabel(KEY_A_DEG, aLabel, COL_BLUE);
+  drawKeyLabel(KEY_B_DEG, bLabel, COL_DIAL);
+}
+
+// Full Memovox dial: blue numerals, red batons, blue/red minute track, and the
+// signature triangle — but no centered wordmark, so the timer can place the
+// exercise / weight / time in the middle.
 static void drawFullDial() {
-  drawBezelFace();
+  drawBareBezel();
+  drawAlarmTriangle();
 
   const float rNum = RAD * 0.74f;
   const float rBatIn = RAD * 0.86f, rBatOut = RAD * 0.95f;
@@ -198,6 +293,7 @@ static void drawFullDial() {
 
   // Hour batons (vermilion) + blue Arabic numerals.
   canvas.setFont(&fonts::FreeSansBold12pt7b);
+  canvas.setTextSize(1);  // guard against a scaled size leaking in from a menu
   canvas.setTextDatum(middle_center);
   canvas.setTextColor(COL_BLUE);
   for (int h = 1; h <= 12; h++) {
@@ -222,6 +318,27 @@ static void drawHand(float deg, float lenFrac, float width, uint16_t color,
   canvas.drawWideLine(bx, by, tx, ty, width, color);
 }
 
+// A Memovox-style hand: a blue body with a white lume inlay running most of its
+// length (inset from tip and hub), plus a short counterweight tail.
+static void drawLumeHand(float deg, float lenFrac, float bodyW) {
+  float tx, ty, bx, by;
+  polar(RAD * lenFrac, deg, tx, ty);
+  polar(RAD * 0.13f, deg + 180.0f, bx, by);
+  canvas.drawWideLine(bx, by, tx, ty, bodyW, COL_BLUE);  // blue body + tail
+
+  float ix, iy, ox, oy;
+  polar(RAD * lenFrac * 0.20f, deg, ix, iy);
+  polar(RAD * lenFrac * 0.82f, deg, ox, oy);
+  canvas.drawWideLine(ix, iy, ox, oy, bodyW - 4, COL_DIAL);  // white lume inlay
+}
+
+// Digital readout in a small framed window so the hands don't blend into it.
+static void drawReadout(int y, const String& text, uint16_t color) {
+  canvas.fillRoundRect(CX - 74, y - 21, 148, 42, 8, COL_DIAL);
+  canvas.drawRoundRect(CX - 74, y - 21, 148, 42, 8, COL_STEEL);
+  gText(text, y, &fonts::FreeSansBold18pt7b, color);
+}
+
 static void present() {
   canvas.pushSprite(0, 0);
 }
@@ -230,7 +347,7 @@ static void present() {
 // Pairing
 // ---------------------------------------------------------------------------
 static bool connectWifi() {
-  drawBezelFace();
+  drawMenuBg();
   gText("Connecting WiFi", CY, &fonts::FreeSansBold12pt7b, COL_BLUE);
   present();
   WiFi.mode(WIFI_STA);
@@ -298,12 +415,16 @@ static bool pollStatus() {
     if (exerciseCount >= MAX_EXERCISES) break;
     exerciseIds[exerciseCount] = ex["id"].as<String>();
     exerciseNames[exerciseCount] = ex["name"].as<String>();
+    exerciseLastWeight[exerciseCount] = ex["last_weight"] | -1;  // -1 if null
+    exerciseLastTime[exerciseCount] = ex["last_time"] | -1;
     exerciseCount++;
   }
   if (exerciseCount == 0) {
     // Account has no exercises yet; offer a sensible default.
     exerciseNames[0] = "Stopwatch Set";
     exerciseIds[0] = "";
+    exerciseLastWeight[0] = -1;
+    exerciseLastTime[0] = -1;
     exerciseCount = 1;
   }
   return true;
@@ -333,64 +454,142 @@ static bool submitSession() {
 // Screens
 // ---------------------------------------------------------------------------
 static void drawPick() {
-  drawBezelFace();
-  gText("EXERCISE", CY - RAD * 0.42f, &fonts::Font0, COL_RED);
+  drawMenuBg();
+  gText("Select Exercise", CY - RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_RED);
   gText(exerciseNames[exerciseIdx], CY, &fonts::FreeSansBold18pt7b, COL_BLUE);
   gText(String(exerciseIdx + 1) + " / " + String(exerciseCount),
-        CY + RAD * 0.30f, &fonts::FreeSansBold9pt7b, COL_TRACK);
-  gText("A: next   hold A: prev   B: select",
-        CY + RAD * 0.62f, &fonts::Font0, COL_TRACK);
+        CY + RAD * 0.34f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  gText("hold A: prev", CY + RAD * 0.56f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  drawKeys("next", "select");
   present();
 }
 
 static void drawWeight() {
-  drawBezelFace();
-  gText("WEIGHT", CY - RAD * 0.42f, &fonts::Font0, COL_RED);
-  gText(String(weight), CY, &fonts::FreeSansBold24pt7b, COL_BLUE);
-  gText("A: +   hold A: -   B: ok",
-        CY + RAD * 0.62f, &fonts::Font0, COL_TRACK);
+  drawMenuBg();
+  gText("WEIGHT", CY - RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_RED);
+  gText(String(weight), CY, &fonts::FreeSansBold24pt7b, COL_BLUE,
+        middle_center, -1, 2);
+  gText("hold A: minus", CY + RAD * 0.56f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  drawKeys("+", "OK");
   present();
 }
 
-// The showpiece: time-under-load shown as a live Memovox watch face. Blue hands
-// sweep while running; the digital readout sits in the lower half of the dial.
+// Time-under-load as a live Memovox watch face: a single red sweep (second) hand
+// plus the digital stopwatch readout, with the set's exercise + weight on the dial.
 static void drawTimer() {
   uint32_t shown = timerRunning ? (millis() - timerStartMs) : timerElapsedMs;
   float totalSec = shown / 1000.0f;
 
   drawFullDial();
 
-  float secDeg = fmodf(totalSec, 60.0f) * 6.0f;
-  float minDeg = fmodf(totalSec / 60.0f, 60.0f) * 6.0f;
-  float hrDeg = fmodf(totalSec / 3600.0f, 12.0f) * 30.0f;
+  // Exercise name — sits halfway between the triangle and the dial center,
+  // echoing the MEMOVOX line on the real watch.
+  gText(exerciseNames[exerciseIdx], CY - RAD * 0.15f, &fonts::FreeSansBold12pt7b,
+        COL_BLUE);
 
-  drawHand(hrDeg, 0.46f, 13, COL_BLUE);
-  drawHand(minDeg, 0.66f, 8, COL_BLUE);
-  drawHand(secDeg, 0.72f, 3, COL_RED);  // sweep / running indicator
-  canvas.fillCircle(CX, CY, 9, COL_BLUE);
+  // Only the second / sweep hand (no hour or minute hands).
+  float secDeg = fmodf(totalSec, 60.0f) * 6.0f;
+  drawHand(secDeg, 0.72f, 3, COL_RED);
+  canvas.fillCircle(CX, CY, 8, COL_BLUE);
   canvas.fillCircle(CX, CY, 3, COL_STEEL);
 
+  // Digital stopwatch readout (hero), in a framed window so the sweep hand
+  // doesn't blend into it.
   char buf[16];
   snprintf(buf, sizeof(buf), "%lu:%02lu.%lu", (unsigned long)(totalSec) / 60,
            (unsigned long)(totalSec) % 60, (shown % 1000) / 100);
-  gText(buf, CY + RAD * 0.30f, &fonts::FreeSansBold12pt7b,
-        timerRunning ? COL_RED : COL_BLUE);
-  gText(timerRunning ? "A: stop" : "A: start   B: save",
-        CY + RAD * 0.62f, &fonts::Font0, COL_TRACK);
+  drawReadout(CY + RAD * 0.20f, buf, timerRunning ? COL_RED : COL_BLUE);
+
+  // Last logged session for this exercise (the target to beat).
+  int lw = exerciseLastWeight[exerciseIdx], lt = exerciseLastTime[exerciseIdx];
+  String prev = (lw >= 0) ? ("Last " + String(lw) + " x " + String(lt) + "s")
+                          : "No history yet";
+  gText(prev, CY + RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  gText("hold A: back", CY + RAD * 0.56f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+
+  // Keys with labels on the caps.
+  drawKeys(timerRunning ? "stop" : "start", "save");
   present();
 }
 
 static void drawDone(bool ok) {
-  drawBezelFace();
-  gText(ok ? "SAVED" : "UPLOAD FAILED", CY - RAD * 0.18f,
+  drawMenuBg();
+  gText(ok ? "SAVED" : "UPLOAD FAILED", CY - RAD * 0.20f,
         &fonts::FreeSansBold18pt7b, ok ? COL_BLUE : COL_RED);
   if (ok) {
-    gText(exerciseNames[exerciseIdx], CY + RAD * 0.10f,
-          &fonts::FreeSansBold9pt7b, COL_TRACK);
+    gText(exerciseNames[exerciseIdx], CY + RAD * 0.06f,
+          &fonts::FreeSansBold12pt7b, COL_TRACK);
     gText(String(weight) + " x " + String((int)round(timerElapsedMs / 1000.0)) + "s",
-          CY + RAD * 0.26f, &fonts::FreeSansBold12pt7b, COL_RED);
+          CY + RAD * 0.28f, &fonts::FreeSansBold18pt7b, COL_RED);
   }
   present();
+}
+
+// ---------------------------------------------------------------------------
+// Hidden clock (easter egg) — RTC kept accurate by occasional NTP sync.
+// ---------------------------------------------------------------------------
+static void syncNtp() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  configTzTime(TZ_INFO, NTP_SERVER);  // sets TZ + starts SNTP -> ESP32 system time
+  struct tm ti;
+  if (getLocalTime(&ti, 6000)) {
+    // Persist to the hardware RTC (as UTC) so time survives a power cycle. This
+    // is best-effort: if M5Unified doesn't drive this board's RTC it's a no-op,
+    // and the clock still works from NTP-synced system time.
+    time_t now = time(nullptr);
+    M5.Rtc.setDateTime(gmtime(&now));
+    ntpDone = true;
+    lastNtpMs = millis();
+    Serial.println("[ntp] synced");
+  } else {
+    Serial.println("[ntp] sync failed");
+  }
+}
+
+// Full Memovox dial as a real clock: hour + minute + second hands from the
+// (NTP-synced) system clock, "HitFlow.xyz" where the exercise sat, and the
+// digital time below.
+static void drawClock() {
+  drawFullDial();
+  gText("HitFlow.xyz", CY - RAD * 0.15f, &fonts::FreeSansBold12pt7b, COL_BLUE);
+
+  struct tm ti;
+  bool haveTime = getLocalTime(&ti, 50);
+  int hh = haveTime ? ti.tm_hour : 0;
+  int mm = haveTime ? ti.tm_min : 0;
+  int ss = haveTime ? ti.tm_sec : 0;
+  float hrDeg = ((hh % 12) + mm / 60.0f) * 30.0f;
+  float minDeg = (mm + ss / 60.0f) * 6.0f;
+  float secDeg = ss * 6.0f;
+
+  drawLumeHand(hrDeg, 0.50f, 9);   // hour
+  drawLumeHand(minDeg, 0.72f, 7);  // minute
+  drawHand(secDeg, 0.78f, 2, COL_RED);  // thin second
+  canvas.fillCircle(CX, CY, 8, COL_BLUE);
+  canvas.fillCircle(CX, CY, 3, COL_STEEL);
+
+  // Framed readout drawn last so its window masks the hands behind it.
+  char buf[16];
+  if (haveTime)
+    snprintf(buf, sizeof(buf), "%2d:%02d:%02d", hh, mm, ss);
+  else
+    snprintf(buf, sizeof(buf), "--:--:--");
+  drawReadout(CY + RAD * 0.20f, buf, COL_BLUE);
+
+  gText("tap to exit", CY + RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  present();
+}
+
+static void enterClock() {
+  // Sync on first entry, or if it's been over an hour.
+  if (!ntpDone || millis() - lastNtpMs > 3600000UL) {
+    drawMenuBg();
+    gText("Syncing time...", CY, &fonts::FreeSansBold12pt7b, COL_BLUE);
+    present();
+    syncNtp();
+  }
+  state = ST_CLOCK;
+  drawClock();
 }
 
 // ---------------------------------------------------------------------------
@@ -423,22 +622,27 @@ void setup() {
   deviceToken = prefs.getString("token", "");
 
   if (!connectWifi()) {
-    drawBezelFace();
-    gText("WiFi failed", CY - 14, &fonts::FreeSansBold12pt7b, COL_RED);
-    gText("Check WIFI_SSID / WIFI_PASS", CY + 18, &fonts::Font0, COL_TRACK);
+    drawMenuBg();
+    gText("WiFi failed", CY - 16, &fonts::FreeSansBold18pt7b, COL_RED);
+    gText("Check WIFI_SSID / WIFI_PASS", CY + 20, &fonts::FreeSansBold9pt7b, COL_TRACK);
     present();
     return;
   }
+
+  // Set the timezone, start background NTP, and seed system time from the
+  // hardware RTC so the hidden clock has time even before its first sync.
+  configTzTime(TZ_INFO, NTP_SERVER);
+  M5.Rtc.setSystemTimeFromRtc();
 
   if (deviceToken.isEmpty()) {
     if (requestPairing()) {
       drawPairingScreen();
       state = ST_PAIRING;
     } else {
-      drawBezelFace();
-      gText("Pairing failed", CY - 20, &fonts::FreeSansBold12pt7b, COL_RED);
-      gText("API " + String(lastHttpCode), CY + 8, &fonts::FreeSansBold9pt7b, COL_TRACK);
-      gText("Restart to retry", CY + 30, &fonts::Font0, COL_TRACK);
+      drawMenuBg();
+      gText("Pairing failed", CY - 24, &fonts::FreeSansBold18pt7b, COL_RED);
+      gText("API " + String(lastHttpCode), CY + 8, &fonts::FreeSansBold12pt7b, COL_TRACK);
+      gText("Restart to retry", CY + 34, &fonts::FreeSansBold9pt7b, COL_TRACK);
       present();
     }
   } else {
@@ -462,7 +666,7 @@ void loop() {
         } else if (!deviceToken.isEmpty() && pairUrl.isEmpty()) {
           // Returning device with a saved token but not yet linked/online: keep
           // a simple waiting screen.
-          drawBezelFace();
+          drawMenuBg();
           gText("Waiting for link", CY, &fonts::FreeSansBold12pt7b, COL_BLUE);
           present();
         }
@@ -472,8 +676,17 @@ void loop() {
 
     case ST_PICK:
       if (M5.BtnA.wasClicked()) {
-        exerciseIdx = (exerciseIdx + 1) % exerciseCount;
-        drawPick();
+        // Track the last three A taps; three within 700ms opens the clock.
+        aTaps[0] = aTaps[1];
+        aTaps[1] = aTaps[2];
+        aTaps[2] = millis();
+        if (aTaps[0] && aTaps[2] - aTaps[0] < 700) {
+          aTaps[0] = aTaps[1] = aTaps[2] = 0;
+          enterClock();
+        } else {
+          exerciseIdx = (exerciseIdx + 1) % exerciseCount;
+          drawPick();
+        }
       } else if (M5.BtnA.wasHold()) {
         exerciseIdx = (exerciseIdx - 1 + exerciseCount) % exerciseCount;
         drawPick();
@@ -481,6 +694,19 @@ void loop() {
         weight = DEFAULT_WEIGHT;
         state = ST_WEIGHT;
         drawWeight();
+      }
+      break;
+
+    case ST_CLOCK:
+      if (M5.BtnA.wasClicked() || M5.BtnB.wasClicked()) {
+        state = ST_PICK;
+        drawPick();
+      } else {
+        static uint32_t lastClk = 0;
+        if (millis() - lastClk > 250) {  // tick the second hand
+          lastClk = millis();
+          drawClock();
+        }
       }
       break;
 
@@ -500,23 +726,37 @@ void loop() {
       break;
 
     case ST_TIMER:
-      if (M5.BtnA.wasClicked()) {
+      if (M5.BtnA.wasHold()) {
+        // Hold A: abandon this set and go back to exercise select.
+        timerRunning = false;
+        timerElapsedMs = 0;
+        state = ST_PICK;
+        drawPick();
+      } else if (M5.BtnA.wasClicked()) {
         if (timerRunning) {
           timerElapsedMs = millis() - timerStartMs;
           timerRunning = false;
-          beep();
+          beep();  // stop
         } else {
           timerStartMs = millis();
           timerRunning = true;
-          beep();
+          passedPrevBeeped = false;  // arm the "beat last time" beep
+          beep();  // start
         }
         drawTimer();
       } else if (M5.BtnB.wasClicked() && !timerRunning && timerElapsedMs > 0) {
         state = ST_SENDING;
-        drawBezelFace();
+        drawMenuBg();
         gText("Saving...", CY, &fonts::FreeSansBold12pt7b, COL_BLUE);
         present();
       } else if (timerRunning) {
+        // Distinct beep the moment we pass the previous session's time.
+        int lastT = exerciseLastTime[exerciseIdx];
+        if (!passedPrevBeeped && lastT > 0 &&
+            (millis() - timerStartMs) >= (uint32_t)lastT * 1000) {
+          passedPrevBeeped = true;
+          beepPassedPrev();
+        }
         static uint32_t lastTick = 0;
         if (millis() - lastTick > 100) {  // live-update the running clock
           lastTick = millis();

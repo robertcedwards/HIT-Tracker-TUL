@@ -18,3 +18,10 @@
 // Starting weight (in whatever unit you log in the app) and the +/- step size.
 #define DEFAULT_WEIGHT 50
 #define WEIGHT_STEP 5
+
+// --- Clock (hidden mode: triple-tap A) --------------------------------------
+// NTP server and POSIX timezone string for the clock's periodic time sync.
+// Examples: US Eastern "EST5EDT,M3.2.0,M11.1.0", US Pacific "PST8PDT,M3.2.0,M11.1.0",
+// UK "GMT0BST,M3.5.0/1,M10.5.0", Central Europe "CET-1CEST,M3.5.0,M10.5.0/3".
+#define NTP_SERVER "pool.ntp.org"
+#define TZ_INFO "EST5EDT,M3.2.0,M11.1.0"

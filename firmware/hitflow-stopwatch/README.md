@@ -92,6 +92,14 @@ To unlink, open **Profile → Connected Devices** in the web app and tap **Revok
 The device's token stops working immediately (it'll show "Upload failed"); reflash
 or clear NVS to re-pair.
 
+### Hidden clock (easter egg)
+
+**Triple-tap button A** on the Select Exercise screen to reveal a full Memovox
+clock — hour/minute/second hands and "HitFlow.xyz" on the dial, kept accurate by
+the hardware RTC with an occasional NTP sync. **Any tap** returns to Select
+Exercise. Set your timezone via `TZ_INFO` (POSIX TZ string) and `NTP_SERVER` in
+`config.h` — see the examples in `config.example.h`.
+
 ## Configuration
 
 All in `include/config.h` (see `config.example.h`):

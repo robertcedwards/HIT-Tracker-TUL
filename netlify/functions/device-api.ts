@@ -238,17 +238,29 @@ export const handler: Handler = async (event) => {
           return json(200, { status: data.status });
         }
 
+        // Include each exercise's most recent session (weight + time-under-load)
+        // so the device can show the last logged numbers as a target.
         const { data: exercises, error: exErr } = await admin
           .from('exercises')
-          .select('id, name')
+          .select('id, name, sessions(weight, time_under_load, timestamp)')
           .eq('user_id', data.user_id)
-          .order('name');
+          .order('name')
+          .order('timestamp', { referencedTable: 'sessions', ascending: false })
+          .limit(1, { referencedTable: 'sessions' });
         if (exErr) throw exErr;
 
         return json(200, {
           status: 'active',
           device_name: data.name,
-          exercises: exercises ?? [],
+          exercises: (exercises ?? []).map((e: any) => {
+            const last = e.sessions?.[0];
+            return {
+              id: e.id,
+              name: e.name,
+              last_weight: last ? last.weight : null,
+              last_time: last ? last.time_under_load : null,
+            };
+          }),
         });
       }
 
