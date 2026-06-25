@@ -132,3 +132,4 @@ Connect Farcaster accounts for free with Sign In with Neynar (SIWN).pdf
 
 # Local Netlify folder
 .netlify
+.claude/settings.local.json
