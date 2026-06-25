@@ -19,6 +19,10 @@
 #define DEFAULT_WEIGHT 50
 #define WEIGHT_STEP 5
 
+// Auto-progression: when a set's time-under-load reaches this many seconds, the
+// next default weight is bumped by WEIGHT_STEP.
+#define TARGET_TUL 90
+
 // --- Clock (hidden mode: triple-tap A) --------------------------------------
 // NTP server and POSIX timezone string for the clock's periodic time sync.
 // Examples: US Eastern "EST5EDT,M3.2.0,M11.1.0", US Pacific "PST8PDT,M3.2.0,M11.1.0",

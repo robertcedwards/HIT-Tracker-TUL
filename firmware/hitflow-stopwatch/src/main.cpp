@@ -40,6 +40,12 @@
 #define TZ_INFO "EST5EDT,M3.2.0,M11.1.0"
 #endif
 
+// Auto-progression: once a set's time-under-load reaches this many seconds, the
+// next default weight is bumped by WEIGHT_STEP. Override in config.h.
+#ifndef TARGET_TUL
+#define TARGET_TUL 90
+#endif
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -83,6 +89,7 @@ static int      lastHttpCode = 0;  // last apiRequest result, for on-screen diag
 static bool     ntpDone = false;       // NTP has synced the RTC at least once
 static uint32_t lastNtpMs = 0;         // millis() of last successful NTP sync
 static uint32_t aTaps[3] = {0, 0, 0};  // recent BtnA click times (triple-tap easter egg)
+static bool     lastSavedOnline = true;  // was the last submit accepted (vs queued)?
 
 // ---------------------------------------------------------------------------
 // HTTP helpers
@@ -433,7 +440,9 @@ static bool pollStatus() {
 // ---------------------------------------------------------------------------
 // Session upload
 // ---------------------------------------------------------------------------
-static bool submitSession() {
+// Build the JSON body for the current set, stamping the real time (UTC) when we
+// have it so queued offline sets keep their actual timestamp once synced.
+static String sessionBody() {
   JsonDocument req;
   if (exerciseIds[exerciseIdx].length()) {
     req["exercise_id"] = exerciseIds[exerciseIdx];
@@ -442,34 +451,166 @@ static bool submitSession() {
   }
   req["weight"] = weight;
   req["time_under_load"] = (int)round(timerElapsedMs / 1000.0);
+  time_t now = time(nullptr);
+  if (now > 1000000000) {  // system clock has been set
+    char ts[25];
+    strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+    req["timestamp"] = ts;
+  }
   String body;
   serializeJson(req, body);
+  return body;
+}
 
+// --- Offline queue: newline-separated session bodies kept in NVS -------------
+static int queueCount() {
+  String q = prefs.getString("queue", "");
+  int n = 0;
+  for (unsigned i = 0; i < q.length(); i++)
+    if (q[i] == '\n') n++;
+  return n;
+}
+
+static void enqueueSession(const String& body) {
+  if (queueCount() >= 40) return;  // cap NVS growth
+  String q = prefs.getString("queue", "");
+  q += body + "\n";
+  prefs.putString("queue", q);
+}
+
+// Resubmit any queued sets; keep the ones that still fail.
+static void flushQueue() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  String q = prefs.getString("queue", "");
+  if (q.isEmpty()) return;
+  String remaining;
+  int start = 0;
+  while (start < (int)q.length()) {
+    int nl = q.indexOf('\n', start);
+    if (nl < 0) break;
+    String body = q.substring(start, nl);
+    start = nl + 1;
+    if (body.isEmpty()) continue;
+    String resp;
+    if (apiRequest("POST", "session", body, true, resp) != 200) {
+      remaining += body + "\n";  // still offline — keep it
+    }
+  }
+  prefs.putString("queue", remaining);
+}
+
+// Submit the current set; on failure, queue it locally and report offline.
+static bool submitSession() {
+  String body = sessionBody();
   String resp;
-  int code = apiRequest("POST", "session", body, true, resp);
-  return code == 200;
+  if (apiRequest("POST", "session", body, true, resp) == 200) {
+    lastSavedOnline = true;
+    return true;
+  }
+  enqueueSession(body);
+  lastSavedOnline = false;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Screen helpers
+// ---------------------------------------------------------------------------
+
+// Small battery gauge + charge state, low on the dial (inside the minute track).
+static void drawBattery() {
+  int lvl = M5.Power.getBatteryLevel();
+  if (lvl < 0) return;  // unknown on this board
+  bool charging = M5.Power.isCharging();
+  const int bw = 28, bh = 13;
+  int bx = CX - bw / 2 - 8, by = CY + RAD * 0.50f + 20;
+  uint16_t col = charging ? COL_BLUE
+                          : (lvl < 15 ? COL_RED : (lvl < 40 ? COL_YELLOW : COL_BLUE));
+  canvas.drawRoundRect(bx, by, bw, bh, 3, COL_STEEL_DK);
+  canvas.fillRect(bx + bw, by + 4, 3, bh - 8, COL_STEEL_DK);  // terminal nub
+  int fw = (bw - 4) * lvl / 100;
+  canvas.fillRoundRect(bx + 2, by + 2, max(2, fw), bh - 4, 2, col);
+  gText(String(lvl) + "%" + (charging ? "+" : ""), by + bh / 2,
+        &fonts::FreeSansBold9pt7b, COL_TRACK, middle_left, bx + bw + 9);
+}
+
+// "hold A: ..." hint tucked just inside the yellow A key.
+static void drawHoldHint(const String& s) {
+  float x, y;
+  polar(RAD * 0.66f, KEY_A_DEG, x, y);
+  gText(s, (int)y, &fonts::FreeSansBold9pt7b, COL_TRACK, middle_center, (int)x);
+}
+
+// Just a "-" where the 'o' of the old "hold:" label sat (weight decrement hint).
+static void drawHoldMinus() {
+  float x, y;
+  polar(RAD * 0.66f, KEY_A_DEG, x, y);
+  gText("-", (int)y, &fonts::FreeSansBold9pt7b, COL_TRACK, middle_center, (int)x - 18);
+}
+
+// Supersampled (anti-aliased) centered text: render at ss× into a temp sprite,
+// then composite onto the dial downscaled by ss with LovyanGFX AA. The temp
+// sprite uses the dial color as its background so the 1-bit glyph edges blend to
+// white on downscale and the opaque push is seamless on the dial center.
+static void gTextAA(const String& text, int cx, int cy, const lgfx::IFont* font,
+                    uint16_t color, uint8_t baseSize, uint8_t ss = 3) {
+  M5Canvas tmp(&canvas);
+  tmp.setColorDepth(16);
+  tmp.setPsram(true);
+  tmp.setFont(font);
+  tmp.setTextSize(baseSize * ss);
+  int w = tmp.textWidth(text), h = tmp.fontHeight();
+  if (w <= 0 || h <= 0 || !tmp.createSprite(w, h)) {
+    gText(text, cy, font, color, middle_center, cx, baseSize);  // fallback
+    return;
+  }
+  tmp.fillSprite(COL_DIAL);
+  tmp.setTextColor(color, COL_DIAL);
+  tmp.setTextDatum(top_left);
+  tmp.drawString(text, 0, 0);
+  tmp.setPivot(w / 2.0f, h / 2.0f);
+  tmp.pushRotateZoomWithAA(&canvas, cx, cy, 0.0f, 1.0f / ss, 1.0f / ss);
+  tmp.deleteSprite();
+}
+
+// Last logged session for the selected exercise ("Last <wt> x <t>s").
+static String lastSessionText() {
+  int lw = exerciseLastWeight[exerciseIdx], lt = exerciseLastTime[exerciseIdx];
+  return (lw >= 0) ? ("Last " + String(lw) + " x " + String(lt) + "s")
+                   : "No history yet";
+}
+
+// Default weight when starting a set: last weight, bumped a step if the last
+// set hit the target time-under-load (auto-progression).
+static int progressedWeight() {
+  int lw = exerciseLastWeight[exerciseIdx], lt = exerciseLastTime[exerciseIdx];
+  if (lw < 0) return DEFAULT_WEIGHT;
+  return (lt >= TARGET_TUL) ? lw + WEIGHT_STEP : lw;
 }
 
 // ---------------------------------------------------------------------------
 // Screens
 // ---------------------------------------------------------------------------
 static void drawPick() {
-  drawMenuBg();
-  gText("Select Exercise", CY - RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_RED);
+  drawFullDial();  // styled like the stopwatch, minus the hands
+  gText("Select Exercise", CY - RAD * 0.36f - 3, &fonts::FreeSansBold9pt7b, COL_RED);
   gText(exerciseNames[exerciseIdx], CY, &fonts::FreeSansBold18pt7b, COL_BLUE);
+  gText(lastSessionText(), CY + RAD * 0.14f, &fonts::FreeSansBold9pt7b, COL_TRACK);
   gText(String(exerciseIdx + 1) + " / " + String(exerciseCount),
-        CY + RAD * 0.34f, &fonts::FreeSansBold9pt7b, COL_TRACK);
-  gText("hold A: prev", CY + RAD * 0.56f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+        CY + RAD * 0.30f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  drawHoldHint("");
+  drawBattery();
   drawKeys("next", "select");
   present();
 }
 
 static void drawWeight() {
-  drawMenuBg();
-  gText("WEIGHT", CY - RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_RED);
-  gText(String(weight), CY, &fonts::FreeSansBold24pt7b, COL_BLUE,
-        middle_center, -1, 2);
-  gText("hold A: minus", CY + RAD * 0.56f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  drawFullDial();
+  gText("WEIGHT", CY - RAD * 0.36f - 3, &fonts::FreeSansBold9pt7b, COL_RED);
+  // Supersampled anti-aliased weight number (the rest of the text is unchanged).
+  gTextAA(String(weight), CX, CY, &fonts::FreeSansBold24pt7b, COL_BLUE, 2);
+  gText(lastSessionText(), CY + RAD * 0.22f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  drawHoldMinus();
+  drawBattery();
   drawKeys("+", "OK");
   present();
 }
@@ -505,23 +646,34 @@ static void drawTimer() {
   String prev = (lw >= 0) ? ("Last " + String(lw) + " x " + String(lt) + "s")
                           : "No history yet";
   gText(prev, CY + RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_TRACK);
-  gText("hold A: back", CY + RAD * 0.56f, &fonts::FreeSansBold9pt7b, COL_TRACK);
 
   // Keys with labels on the caps.
   drawKeys(timerRunning ? "stop" : "start", "save");
   present();
 }
 
-static void drawDone(bool ok) {
+static void drawDone(bool online) {
   drawMenuBg();
-  gText(ok ? "SAVED" : "UPLOAD FAILED", CY - RAD * 0.20f,
-        &fonts::FreeSansBold18pt7b, ok ? COL_BLUE : COL_RED);
-  if (ok) {
-    gText(exerciseNames[exerciseIdx], CY + RAD * 0.06f,
-          &fonts::FreeSansBold12pt7b, COL_TRACK);
-    gText(String(weight) + " x " + String((int)round(timerElapsedMs / 1000.0)) + "s",
-          CY + RAD * 0.28f, &fonts::FreeSansBold18pt7b, COL_RED);
-  }
+  // Either way the set is saved (synced now, or queued locally to sync later).
+  gText(online ? "SAVED" : "SAVED OFFLINE", CY - RAD * 0.30f,
+        &fonts::FreeSansBold18pt7b, online ? COL_BLUE : COL_YELLOW);
+  gText(exerciseNames[exerciseIdx], CY - RAD * 0.08f,
+        &fonts::FreeSansBold12pt7b, COL_TRACK);
+  int sec = (int)round(timerElapsedMs / 1000.0);
+  gText(String(weight) + " x " + String(sec) + "s", CY + RAD * 0.10f,
+        &fonts::FreeSansBold18pt7b, COL_RED);
+
+  // Auto-progression cue for the next set.
+  if (sec >= TARGET_TUL)
+    gText("Hit target! Next: " + String(weight + WEIGHT_STEP), CY + RAD * 0.34f,
+          &fonts::FreeSansBold9pt7b, COL_BLUE);
+  else
+    gText("Build to " + String(TARGET_TUL) + "s", CY + RAD * 0.34f,
+          &fonts::FreeSansBold9pt7b, COL_TRACK);
+
+  if (!online)
+    gText(String(queueCount()) + " queued", CY + RAD * 0.52f, &fonts::FreeSansBold9pt7b,
+          COL_TRACK);
   present();
 }
 
@@ -577,6 +729,7 @@ static void drawClock() {
   drawReadout(CY + RAD * 0.20f, buf, COL_BLUE);
 
   gText("tap to exit", CY + RAD * 0.40f, &fonts::FreeSansBold9pt7b, COL_TRACK);
+  drawBattery();
   present();
 }
 
@@ -660,6 +813,7 @@ void loop() {
         lastPollMs = millis();
         if (pollStatus()) {
           vibrate();
+          flushQueue();  // push any sets logged while offline
           exerciseIdx = 0;
           state = ST_PICK;
           drawPick();
@@ -674,7 +828,8 @@ void loop() {
       break;
     }
 
-    case ST_PICK:
+    case ST_PICK: {
+      auto tp = M5.Touch.getDetail();
       if (M5.BtnA.wasClicked()) {
         // Track the last three A taps; three within 700ms opens the clock.
         aTaps[0] = aTaps[1];
@@ -690,12 +845,19 @@ void loop() {
       } else if (M5.BtnA.wasHold()) {
         exerciseIdx = (exerciseIdx - 1 + exerciseCount) % exerciseCount;
         drawPick();
-      } else if (M5.BtnB.wasClicked()) {
-        weight = DEFAULT_WEIGHT;
+      } else if (M5.BtnB.wasClicked() || tp.wasClicked()) {
+        weight = progressedWeight();  // auto-progression default
         state = ST_WEIGHT;
         drawWeight();
+      } else if (tp.wasFlicked()) {
+        if (tp.distanceX() < -25)
+          exerciseIdx = (exerciseIdx + 1) % exerciseCount;       // swipe left -> next
+        else if (tp.distanceX() > 25)
+          exerciseIdx = (exerciseIdx - 1 + exerciseCount) % exerciseCount;
+        drawPick();
       }
       break;
+    }
 
     case ST_CLOCK:
       if (M5.BtnA.wasClicked() || M5.BtnB.wasClicked()) {
@@ -710,38 +872,46 @@ void loop() {
       }
       break;
 
-    case ST_WEIGHT:
+    case ST_WEIGHT: {
+      auto tp = M5.Touch.getDetail();
       if (M5.BtnA.wasClicked()) {
         weight += WEIGHT_STEP;
         drawWeight();
       } else if (M5.BtnA.wasHold()) {
         weight = max(0, weight - WEIGHT_STEP);
         drawWeight();
-      } else if (M5.BtnB.wasClicked()) {
+      } else if (M5.BtnB.wasClicked() || tp.wasClicked()) {
         timerElapsedMs = 0;
         timerRunning = false;
         state = ST_TIMER;
         drawTimer();
+      } else if (tp.wasFlicked()) {
+        if (tp.distanceY() < -25) weight += WEIGHT_STEP;          // swipe up -> +
+        else if (tp.distanceY() > 25) weight = max(0, weight - WEIGHT_STEP);
+        drawWeight();
       }
       break;
+    }
 
-    case ST_TIMER:
+    case ST_TIMER: {
+      auto tp = M5.Touch.getDetail();
       if (M5.BtnA.wasHold()) {
         // Hold A: abandon this set and go back to exercise select.
         timerRunning = false;
         timerElapsedMs = 0;
         state = ST_PICK;
         drawPick();
-      } else if (M5.BtnA.wasClicked()) {
+      } else if (M5.BtnA.wasClicked() || tp.wasClicked()) {
+        // Manual start/stop (button or screen tap).
         if (timerRunning) {
           timerElapsedMs = millis() - timerStartMs;
           timerRunning = false;
-          beep();  // stop
+          beep();
         } else {
           timerStartMs = millis();
           timerRunning = true;
-          passedPrevBeeped = false;  // arm the "beat last time" beep
-          beep();  // start
+          passedPrevBeeped = false;
+          beep();
         }
         drawTimer();
       } else if (M5.BtnB.wasClicked() && !timerRunning && timerElapsedMs > 0) {
@@ -756,6 +926,7 @@ void loop() {
             (millis() - timerStartMs) >= (uint32_t)lastT * 1000) {
           passedPrevBeeped = true;
           beepPassedPrev();
+          vibrate();
         }
         static uint32_t lastTick = 0;
         if (millis() - lastTick > 100) {  // live-update the running clock
@@ -764,6 +935,7 @@ void loop() {
         }
       }
       break;
+    }
 
     case ST_SENDING: {
       bool ok = submitSession();

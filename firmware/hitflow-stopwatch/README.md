@@ -82,11 +82,27 @@ and vibration motor (which sits behind the M5IOE1 I²C expander) correctly.
 1. **First boot** — it connects to WiFi and shows a QR code + a short code.
 2. **Pair** — scan the QR with your phone (it opens `hitflow.xyz/link-device?code=…`).
    Sign in if needed; the device links to your account automatically.
-3. **Log a set** (`BtnA` = yellow KEYA, `BtnB` = blue KEYB):
-   - **Exercise** — `BtnA` next, hold `BtnA` previous, `BtnB` to select.
-   - **Weight** — `BtnA` +step, hold `BtnA` −step, `BtnB` to confirm.
-   - **Timer** — `BtnA` start/stop the time-under-load, then `BtnB` to save.
-   - The set uploads and appears in your Hit Flow history immediately.
+3. **Log a set** (`BtnA` = yellow KEYA, `BtnB` = blue KEYB; the touchscreen works too):
+   - **Exercise** — `BtnA`/swipe to change, hold `BtnA` previous, `BtnB`/tap to select.
+   - **Weight** — `BtnA`/swipe up +step, hold `BtnA`/swipe down −step, `BtnB`/tap to confirm.
+   - **Timer** — `BtnA`/tap start/stop the time-under-load, then `BtnB` to save;
+     hold `BtnA` to abandon and go back.
+   - The set uploads (or queues offline) and appears in your Hit Flow history.
+
+### More features
+- **IMU auto-timer** — on the timer screen the BMI270 auto-starts the clock when
+  you begin moving and auto-stops after you hold still. Manual button/tap still
+  works. (Thresholds in `imuMoving()` / the `ST_TIMER` handler — tune to taste.)
+- **Battery + charge** — a small gauge on the menu/clock screens (green/amber/red,
+  `+` while charging).
+- **Offline queue** — if WiFi/API is unavailable, sets are saved to NVS ("SAVED
+  OFFLINE") and flushed automatically on the next connection (timestamped so they
+  land at the right time).
+- **Auto-progression** — the next set's default weight starts from your last
+  weight and bumps by `WEIGHT_STEP` once you hit `TARGET_TUL` seconds; the SAVED
+  screen shows the suggestion.
+- **Last session** — the exercise/weight/timer screens show "Last `<wt>` x `<t>`s"
+  as a target, with a distinct beep + buzz when you pass your previous time.
 
 To unlink, open **Profile → Connected Devices** in the web app and tap **Revoke**.
 The device's token stops working immediately (it'll show "Upload failed"); reflash
