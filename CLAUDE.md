@@ -80,6 +80,7 @@ src/
 | public | `user_supplements` | User's personal supplement list (user_id, supplement_id, custom_dosage) |
 | public | `supplement_usages` | Daily intake log (user_supplement_id, timestamp, dosage_mg) |
 | public | `user_exercises` | (reserved, currently unpopulated) |
+| public | `devices` | Paired hardware devices (M5Stack Stopwatch); opaque token hash, pairing code, status. Schema: `supabase/devices.sql` |
 | storage | `supplement-thumbnails` | AI-extracted label thumbnails (public bucket) |
 
 ### Storage
@@ -92,6 +93,7 @@ Stored in `.env` (gitignored). Set in Netlify dashboard for production.
 |----------|---------|
 | `VITE_SUPABASE_URL` | `https://qaujynofythxbnhnczda.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | Public anon key for Supabase client |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key — **server only** (`device-api` function). Bypasses RLS to write device-submitted sessions. Never expose to the client. |
 | `VITE_NEYNAR_API_KEY` | Farcaster/Neynar integration |
 | `VITE_APP_URL` | `https://hitflow.xyz` |
 | `VITE_MOONDREAM_API_URL` | `https://api.moondream.ai/v1` |

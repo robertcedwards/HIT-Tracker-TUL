@@ -132,3 +132,15 @@ Connect Farcaster accounts for free with Sign In with Neynar (SIWN).pdf
 
 # Local Netlify folder
 .netlify
+
+# Claude Code — personal/local settings (may contain machine-specific commands
+# and secrets in the permission allowlist); never commit these.
+.claude/settings.local.json
+.claude/worktrees/
+.claude/*.local.json
+
+# Firmware secrets (WiFi creds, tokens)
+firmware/**/include/config.h
+
+# macOS
+.DS_Store

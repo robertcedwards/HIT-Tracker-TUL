@@ -89,6 +89,12 @@ export function AuthComponent() {
             supabaseClient={supabase}
             appearance={{ theme: ThemeSupa }}
             providers={['google']}
+            // Return to the exact current URL after OAuth (preserves a
+            // /link-device?code=... so device pairing resumes automatically).
+            // On prod this equals site_url; locally it keeps the session on the
+            // dev origin instead of bouncing to hitflow.xyz. The target URL must
+            // also be in Supabase → Auth → URL Configuration → Redirect URLs.
+            redirectTo={typeof window !== 'undefined' ? window.location.href : undefined}
           />
           <div className="mt-4 pt-4 border-t text-sm text-gray-500 text-center">
             By signing in, you agree to our{' '}
